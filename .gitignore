@@ -1,0 +1,35 @@
+# python artifacts
+__pycache__/
+*.py[cod]
+
+# virtual environments
+.env
+venv/
+env/
+
+# os specific files
+.DS_Store
+Thumbs.db
+
+# ide directories
+.vscode/
+.idea/
+
+# media downloads
+*.mp4
+*.webm
+*.avi
+*.mkv
+
+# web dependencies
+node_modules/
+
+# sensitive configuration files
+config/client-secrets.json
+config/token.json
+config/youtube-cookies.txt
+
+# temporary editor backup files
+*~
+*.pid
+*.tar.gz

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clip-handler</title>
+    <script src="https://unpkg.com/konva@9.3.1/konva.min.js"></script>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box }
+        body { display:flex; height:100vh; background-color:#1e1e1e; color:#ffffff; font-family:sans-serif }
+        
+        #main-view { flex:1; display:flex; flex-direction:column }
+        #workspace { flex:1; display:flex; align-items:center; justify-content:center; background-color:#000; overflow:hidden; padding:20px }
+        #video-wrapper { position:relative; display:flex; flex-direction:column; max-width:100%; max-height:100% }
+        
+        video { max-width:100%; max-height:calc(100vh - 120px); display:block; z-index:1 }
+        #canvas-container { position:absolute; top:0; left:0; z-index:2 }
+        #crop-preview-box { position:absolute; border:2px solid #2ecc71; box-shadow:0 0 0 9999px rgba(0,0,0,0.7); cursor:move; z-index:4; display:none; }
+
+        #transport-bar { height:60px; background-color:#1a1a1a; display:flex; align-items:center; justify-content:center; padding:0 20px; gap:25px }
+        
+        #sidebar { width:350px; background-color:#2a2a2a; display:flex; flex-direction:column; border-left:1px solid #444; flex-shrink:0 }
+        .tab-header { display:flex; background-color:#1e1e1e; border-bottom:1px solid #444 }
+        .tab-btn { flex:1; padding:10px; background:none; border:none; color:#aaa; cursor:pointer; font-weight:bold; font-size:12px; transition:0.2s }
+        .tab-btn:hover { color:#fff; background-color:#333 }
+        .tab-btn.active { color:#fff; border-bottom:2px solid #00a8ff; background-color:#2a2a2a }.tab-content { padding:20px; display:none; flex:1; overflow-y:auto }
+        .tab-content.active { display:block }
+        
+        .layer-group { background-color:#222; border:1px solid #444; border-radius:4px; margin-bottom:10px; padding:10px }
+        .layer-group.drag-over { border-top:2px solid #00a8ff }
+        .layer-title { font-weight:bold; margin-bottom:10px; color:#00a8ff; border-bottom:1px solid #444; padding-bottom:5px }
+        
+        .layer-item { display:flex; align-items:center; background-color:#2a2a2a; padding:10px 15px; border-bottom:1px solid #1e1e1e; cursor:pointer; color:#aaa; user-select:none; transition:0.2s }
+        .layer-item:hover { background-color:#333 }
+        .layer-item.active { background-color:#4a4a4a; color:#fff }
+        .layer-item.active-parent { border-left:3px solid #00a8ff; background-color:#4a4a4a }
+        
+        .list-item { background-color:#333; padding:8px; margin-bottom:5px; border-radius:4px; display:flex; justify-content:space-between; align-items:center; font-size:14px }
+        .list-item.active-item { border-left:3px solid #00a8ff; background-color:#4a4a4a }
+        .list-item.drag-over { border-top:2px solid #00a8ff }
+        
+        .layer-icon { width:18px; height:18px; display:flex; justify-content:center; align-items:center; cursor:pointer; opacity:0.3; transition:0.2s }
+        .layer-icon:hover { opacity:0.8 }
+        .layer-icon.active { opacity:1; color:#fff }
+        .layer-icon.small { width:14px; height:14px }
+        .layer-name { flex:1; font-size:14px; margin-left:15px }
+        .layer-lock { margin-left:auto }
+        
+        .drag-handle { width:14px; height:14px; cursor:grab; opacity:0.5; margin-right:8px; display:inline-flex; align-items:center; transition:0.2s }
+        .drag-handle.disabled { opacity:0.2; cursor:not-allowed }
+        .drag-handle:not(.disabled):hover { opacity:1 }
+        .list-item:active .drag-handle:not(.disabled) { cursor:grabbing }
+        
+        .action-btn { background-color:#00a8ff; color:white; border:none; padding:6px 10px; border-radius:2px; cursor:pointer; font-weight:bold; font-size:13px; width:100%; margin-top:10px; letter-spacing:0.5px }
+        .action-btn:hover { background-color:#0097e6 }
+        .small-btn { padding:4px 8px; font-size:11px; margin-top:0; width:auto }
+        .remove-btn { background-color:#e84118 }
+        .remove-btn:hover { background-color:#c23616 }
+        .panel-input { width:100%; padding:8px; margin-bottom:10px; background:#1e1e1e; border:1px solid #555; color:#fff }
+        
+        .scrubber-container { width:100%; position:relative; display:flex; align-items:center; height:20px; cursor:pointer }
+        .scrubber-container:hover input[type=range]::-webkit-slider-runnable-track { height:6px }
+        .scrubber-container:hover #scrubber-track-bg { height:6px }
+        #scrubber-track-bg { position:absolute; left:0; top:50%; transform:translateY(-50%); height:4px; width:100%; background:#ff0000; z-index:1; pointer-events:none; transition:height 0.1s }
+
+        input[type=range] { -webkit-appearance:none; width:100%; background:transparent; position:absolute; z-index:3; margin:0; outline:none }
+        input[type=range]::-webkit-slider-runnable-track { width:100%; height:4px; cursor:pointer; background:transparent; transition:height 0.1s }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; height:24px; width:2px; border-radius:0; border:none; background:#f1c40f; cursor:pointer; margin-top:-10px; box-shadow:0 0 3px rgba(0,0,0,0.8) }
+        input[type=range]::-moz-range-thumb { height:24px; width:6px; border-radius:0; border:none; background:#f1c40f; cursor:pointer; box-shadow:0 0 3px rgba(0,0,0,0.8) }
+
+        #scrubber-progress { position:absolute; left:0; top:50%; transform:translateY(-50%); height:4px; background:#f1c40f; z-index:2; pointer-events:none; transition:height 0.1s }
+        
+        #scrubber-tooltip { position:absolute; top:-25px; background:rgba(0,0,0,0.8); color:#f1c40f; padding:4px 8px; border-radius:4px; font-size:12px; font-family:monospace; pointer-events:none; opacity:0; transform:translateX(-50%); z-index:5; white-space:nowrap }
+        #hover-tooltip { position:absolute; top:-25px; background:rgba(0,0,0,0.8); color:#aaaaaa; padding:4px 8px; border-radius:4px; font-size:12px; font-family:monospace; pointer-events:none; opacity:0; transform:translateX(-50%); z-index:4; white-space:nowrap }
+
+        .mute-container { display:flex; align-items:center; gap:8px; cursor:pointer }
+        .mute-container input { cursor:pointer; width:18px; height:18px }
+
+        /* time segment spinner styles */
+        .time-spinner-group { display:inline-flex; background:#1e1e1e; border:1px solid #555; padding:6px; font-family:monospace; font-size:12px; user-select:none }
+        .time-spinner-group.disabled { opacity:0.5; pointer-events:none }
+        .time-segment { cursor:ns-resize; padding:0 2px; color:#fff; transition:color 0.1s }
+        .time-segment:hover { color:#00a8ff }
+
+        .multi-track-lane { width:100%; height:12px; background-color:#111; position:relative; border-radius:2px; overflow:hidden; margin-bottom:2px }
+        .multi-track-block { position:absolute; height:100%; top:0; border-radius:2px; cursor:pointer; opacity:0.7; transition:opacity 0.2s }
+        .multi-track-block:hover { opacity:1 }
+        .multi-track-label { position:absolute; left:5px; top:0; font-size:9px; color:#fff; line-height:12px; pointer-events:none; z-index:3; text-shadow:0 0 2px #000; white-space:nowrap }
+    </style>
+</head>
+<body>
+
+    <div id="main-view">
+        <div id="workspace">
+            <div id="video-wrapper">
+                <div style="position:relative">
+                    <video id="main-video">
+                        <source src="/raw-clips/{{ request.args.get('file', 'placeholder.mp4') }}" type="video/mp4">
+                    </video>
+                    <div id="canvas-container"></div>
+                    <div id="crop-preview-box"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div style="width:100%; display:flex; flex-direction:column; padding:15px 20px 0 20px; background-color:#1a1a1a; border-top:1px solid #444">
+            <div class="scrubber-container" id="scrubber-wrap" style="height:20px; width:100%; position:relative">
+                <div id="scrubber-tooltip">00:00:00 / 00:00:00</div>
+                <div id="hover-tooltip">00:00:00</div>
+                <div id="scrubber-track-bg"></div>
+                <div id="scrubber-progress" style="width:0%"></div>
+                <input type="range" id="timeline-scrubber" value="0" min="0" step="0.001">
+            </div>
+            <div id="active-obj-lane" style="width:100%; height:12px; background-color:#111; margin-top:2px; margin-bottom:5px; position:relative; border-radius:2px; overflow:hidden"></div>
+            
+            <button id="toggle-multi-track-btn" style="background:none; border:none; color:#aaa; cursor:pointer; font-size:10px; text-align:left; padding:2px 0; margin-bottom:5px; width:fit-content">▼ Show All Tracks</button>
+            <div id="multi-track-container" style="display:none; flex-direction:column; width:100%; max-height:100px; overflow-y:auto; margin-bottom:5px"></div>
+        </div>
+
+        <div id="transport-bar" style="border-top:none">
+            <button id="play-pause-btn" class="action-btn small-btn" style="width:80px; font-size:14px; padding:8px">Play</button>
+            <label class="mute-container">
+                <input type="checkbox" id="mute-toggle">
+                <span>Mute</span>
+            </label>
+            <span id="time-display" style="font-family:monospace; font-size:16px; min-width:180px; text-align:center">00:00:00 / 00:00:00</span>
+        </div>
+    </div>
+
+    <div id="sidebar">
+        <div class="tab-header">
+            <button class="tab-btn active" onclick="switchTab('layers-tab')">Layers</button>
+            <button class="tab-btn" onclick="switchTab('canvas-tab')">Canvas</button>
+            <button class="tab-btn" onclick="switchTab('shapes-tab')">Tracking</button>
+            <button class="tab-btn" onclick="switchTab('export-tab')">Export</button>
+        </div>
+
+        <div id="layers-tab" class="tab-content active">
+            <div style="display:flex; gap:10px; margin-bottom:15px">
+                <button id="add-text-btn" class="action-btn" style="margin-bottom:0">Add Text</button>
+                <button id="add-image-btn" class="action-btn" style="margin-bottom:0; background-color:#e1b12c">Add Image</button>
+            </div>
+            
+            <div id="layers-container"></div>
+            
+            <div id="text-edit-panel" style="display:none; margin-top:10px; padding:10px 15px">
+                <h4 style="margin-bottom:10px; color:#aaa">Edit Text Properties</h4>
+                <input type="text" id="edit-text-value" class="panel-input" />
+                <div style="display:flex; gap:10px; align-items:center">
+                    <input type="number" id="edit-font-size" class="panel-input" style="width:70px; margin-bottom:0" />
+                    <input type="color" id="edit-font-color" class="panel-input" style="width:50px; height:35px; cursor:pointer; margin-bottom:0" />
+                    <button id="confirm-text-btn" class="action-btn" style="background-color:#4cd137; width:40px; margin-top:0; padding:8px">✔</button>
+                </div>
+            </div>
+
+            <div id="image-edit-panel" style="display:none; margin-top:10px; padding:10px 15px">
+                <h4 style="margin-bottom:10px; color:#aaa">Image Properties</h4>
+                <div style="display:flex; gap:10px; align-items:center">
+                    <span style="font-size:12px; color:#aaa; flex:1">Placeholder shape active</span>
+                    <button id="confirm-image-btn" class="action-btn" style="background-color:#4cd137; width:40px; margin-top:0; padding:8px">✔</button>
+                </div>
+            </div>
+        </div>
+        <div id="canvas-tab" class="tab-content">
+            <h3>Canvas Cropping</h3>
+            <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; margin-bottom:15px">
+                <button class="action-btn small-btn ratio-btn" data-ratio="16/9" style="width:calc(50% - 5px); margin-top:0">16:9</button>
+                <button class="action-btn small-btn ratio-btn" data-ratio="9/16" style="width:calc(50% - 5px); margin-top:0">9:16</button>
+                <button class="action-btn small-btn ratio-btn" data-ratio="1/1" style="width:calc(50% - 5px); margin-top:0">1:1</button>
+                <button class="action-btn small-btn ratio-btn" data-ratio="4/5" style="width:calc(50% - 5px); margin-top:0">4:5</button>
+            </div>
+            <div style="display:flex; justify-content:flex-end">
+                <button id="confirm-crop-btn" class="action-btn" style="background-color:#2ecc71; width:40px; margin-top:0; padding:8px; display:none;">✔</button>
+            </div>
+        </div>
+
+        <div id="shapes-tab" class="tab-content">
+            <h3>Target Tracking</h3>
+            <button id="add-box-btn" class="action-btn">Add Target Box</button>
+            
+            <div id="shape-edit-panel" style="display:none; margin-top:10px; padding:10px 15px">
+                <h4 style="margin-bottom:10px; color:#aaa">Target Properties</h4>
+                <div style="display:flex; gap:10px; align-items:center">
+                    <button id="process-tracking-btn" class="action-btn" style="background-color:#9b59b6; margin-top:0; flex:1">Process Tracking</button>
+                    <button id="confirm-shape-btn" class="action-btn" style="background-color:#4cd137; width:40px; margin-top:0; padding:8px">✔</button>
+                </div>
+            </div>
+
+            <div id="time-edit-panel" style="display:none; margin-top:10px; padding:10px 15px; background-color:#222; border:1px solid #444; border-radius:4px">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+                    <h4 style="color:#aaa; font-size:12px; text-transform:uppercase; margin-bottom:0">Interval Timing</h4>
+                    <div id="edit-time-lock" class="layer-icon small" title="Lock Interval">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                    </div>
+                </div>
+                <div style="display:flex; gap:15px; align-items:flex-end">
+                    <div style="display:flex; flex-direction:column; gap:3px">
+                        <span style="font-size:10px; color:#aaa">START (HH:MM:SS:MS)</span>
+                        <div id="edit-start-time-group" class="time-spinner-group" data-target="start">
+                            <span class="time-segment" data-type="h">00</span>:<span class="time-segment" data-type="m">00</span>:<span class="time-segment" data-type="s">00</span>:<span class="time-segment" data-type="ms">000</span>
+                        </div>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:3px">
+                        <span style="font-size:10px; color:#aaa">END (HH:MM:SS:MS)</span>
+                        <div id="edit-end-time-group" class="time-spinner-group" data-target="end">
+                            <span class="time-segment" data-type="h">00</span>:<span class="time-segment" data-type="m">00</span>:<span class="time-segment" data-type="s">00</span>:<span class="time-segment" data-type="ms">000</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="export-tab" class="tab-content">
+            <h3>Final Assembly</h3>
+            <button id="submit-queue-btn" class="action-btn" style="background-color:#4cd137;">Submit to Queue</button>
+        </div>
+    </div>
+
+    <script type="module" src="/static/js/main.js"></script>
+</body>
+</html>
