@@ -212,7 +212,10 @@ export function renderMultiTrackTimeline() {
     appLayers.forEach(layer => {
         if (layer.type === 'base') return
         
-        layer.objects.forEach((obj, index) => {
+        // Reverse the objects so the vertical stacking perfectly matches the Layers tab
+        const reversedObjects = [...layer.objects].reverse()
+        
+        reversedObjects.forEach(obj => {
             const lane = document.createElement('div')
             lane.className = 'multi-track-lane'
             
@@ -231,7 +234,10 @@ export function renderMultiTrackTimeline() {
             
             const label = document.createElement('div')
             label.className = 'multi-track-label'
-            label.innerText = index + 1
+            
+            // extracts digits from object name to maintain numeric tracking
+            const numericMatch = obj.name.match(/\d+/)
+            label.innerText = numericMatch ? numericMatch[0] : index + 1
             
             block.appendChild(label)
             
