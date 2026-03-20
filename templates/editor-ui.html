@@ -7,23 +7,80 @@
     <script src="https://unpkg.com/konva@9.3.1/konva.min.js"></script>
     <style>
         * { margin:0; padding:0; box-sizing:border-box }
-        body { display:flex; height:100vh; background-color:#1e1e1e; color:#ffffff; font-family:sans-serif }
-        
-        #main-view { flex:1; display:flex; flex-direction:column }
-        #workspace { flex:1; display:flex; align-items:center; justify-content:center; background-color:#000; overflow:hidden; padding:20px }
-        #video-wrapper { position:relative; display:flex; flex-direction:column; max-width:100%; max-height:100% }
-        
-        video { max-width:100%; max-height:calc(100vh - 120px); display:block; z-index:1 }
-        #canvas-container { position:absolute; top:0; left:0; z-index:2 }
-        #crop-preview-box { position:absolute; border:2px solid #2ecc71; box-shadow:0 0 0 9999px rgba(0,0,0,0.7); cursor:move; z-index:4; display:none; }
 
-        #transport-bar { height:60px; background-color:#1a1a1a; display:flex; align-items:center; justify-content:center; padding:0 20px; gap:25px }
+        /* Establishes relative anchor for the entire absolute layout */
+        body { 
+            margin:0; padding:0; height:100vh; width:100vw; background-color:#111; 
+            color:#fff; font-family:sans-serif; overflow:hidden; position:relative; 
+        }
+
+        /* BLACK BOX */
+        #workspace { 
+            position:absolute; top:0; left:0; 
+            width:calc(100vw - 320px); height:calc(100vh - 130px); 
+            background-color:#000; display:flex; 
+            justify-content:center; align-items:flex-start; /* Anchors the wrapper to the top */
+            transition:width 0.2s, height 0.2s; 
+        }
+
+        /* GREY BOX */
+        #video-wrapper { 
+            position:relative; width:calc(100% - 40px); height:calc(100% - 40px); 
+            min-width:650px; min-height:400px; 
+            margin-top:20px; /* The hard 20px lock from the top */
+            display:flex; 
+            justify-content:center; align-items:center; 
+        }
+
+        #main-video { width:100%; height:100%; object-fit:contain; display:block; z-index:1; }
+        #canvas-container { position:absolute; top:0; left:0; width:100%; height:100%; z-index:2; }
         
-        #sidebar { width:350px; background-color:#2a2a2a; display:flex; flex-direction:column; border-left:1px solid #444; flex-shrink:0 }
+        #crop-preview-box { position:absolute; border:2px dashed #2ecc71; box-shadow:0 0 0 9999px rgba(0,0,0,0.7); cursor:move; z-index:4; display:none; }
+
+        /* RED BOX: Anchored to bottom left, height adjusts upward */
+        #bottom-controls { 
+            position:absolute; bottom:0; left:0; 
+            width:calc(100vw - 320px); 
+            min-height:130px; height:auto; /* Swapped fixed height for auto-growth */
+            background-color:rgba(26, 26, 26, 0.95); border-top:1px solid #444; 
+            display:flex; flex-direction:column; z-index:10; transition:width 0.2s; 
+            backdrop-filter:blur(4px);
+        }
+
+        #transport-bar { height:60px; background-color:transparent; display:flex; align-items:center; justify-content:center; padding:0 20px; gap:25px; margin-top:auto; }
+
+        /* PURPLE BOX: Anchored to top right */
+        #sidebar { 
+            position:absolute; top:0; right:0; 
+            width:320px; height:100vh; 
+            background-color:#222; border-left:1px solid #333; 
+            display:flex; flex-direction:column; z-index:20; transition:width 0.2s; 
+        }
+
+        /* STAGE 1 (OVERLAP): Viewport is smaller than Video + UI */
+        @media (max-width: 970px), (max-height: 530px) {
+            #workspace {
+                justify-content: flex-start; /* Forces the video top-left, UI covers bottom-right */
+            }
+            #video-wrapper {
+                margin-left: 0; /* Allows the left edge to touch the left side of the page */
+            }
+        }
+
+        /* STAGE 2 (COLLAPSE): Scrubber vertically overlaps, or screen is too narrow */
+        @media (max-width: 700px), (max-height: 530px) {
+            #sidebar { width: 20px; cursor: pointer; min-width: 20px; }
+            #sidebar > * { display: none !important; }
+            #bottom-controls { width: calc(100vw - 20px); }
+            #workspace { width: calc(100vw - 20px); }
+        }
+
+        /* --- UI Component Styles --- */
         .tab-header { display:flex; background-color:#1e1e1e; border-bottom:1px solid #444 }
         .tab-btn { flex:1; padding:10px; background:none; border:none; color:#aaa; cursor:pointer; font-weight:bold; font-size:12px; transition:0.2s }
         .tab-btn:hover { color:#fff; background-color:#333 }
-        .tab-btn.active { color:#fff; border-bottom:2px solid #00a8ff; background-color:#2a2a2a }.tab-content { padding:20px; display:none; flex:1; overflow-y:auto }
+        .tab-btn.active { color:#fff; border-bottom:2px solid #00a8ff; background-color:#2a2a2a }
+        .tab-content { padding:20px; display:none; flex:1; overflow-y:auto }
         .tab-content.active { display:block }
         
         .layer-group { background-color:#222; border:1px solid #444; border-radius:4px; margin-bottom:10px; padding:10px }
@@ -90,20 +147,18 @@
 </head>
 <body>
 
-    <div id="main-view">
-        <div id="workspace">
-            <div id="video-wrapper">
-                <div style="position:relative">
-                    <video id="main-video">
-                        <source src="/raw-clips/{{ request.args.get('file', 'placeholder.mp4') }}" type="video/mp4">
-                    </video>
-                    <div id="canvas-container"></div>
-                    <div id="crop-preview-box"></div>
-                </div>
-            </div>
+    <div id="workspace">
+        <div id="video-wrapper">
+            <video id="main-video">
+                <source src="/raw-clips/{{ request.args.get('file', 'placeholder.mp4') }}" type="video/mp4">
+            </video>
+            <div id="canvas-container"></div>
+            <div id="crop-preview-box"></div>
         </div>
-        
-        <div style="width:100%; display:flex; flex-direction:column; padding:15px 20px 0 20px; background-color:#1a1a1a; border-top:1px solid #444">
+    </div>
+    
+    <div id="bottom-controls">
+        <div style="width:100%; display:flex; flex-direction:column; padding:15px 20px 0 20px; box-sizing:border-box;">
             <div class="scrubber-container" id="scrubber-wrap" style="height:20px; width:100%; position:relative">
                 <div id="scrubber-tooltip">00:00:00 / 00:00:00</div>
                 <div id="hover-tooltip">00:00:00</div>
@@ -117,8 +172,8 @@
             <div id="multi-track-container" style="display:none; flex-direction:column; width:100%; max-height:100px; overflow-y:auto; margin-bottom:5px"></div>
         </div>
 
-        <div id="transport-bar" style="border-top:none">
-            <button id="play-pause-btn" class="action-btn small-btn" style="width:80px; font-size:14px; padding:8px">Play</button>
+        <div id="transport-bar" style="border-top:1px solid #444; box-sizing:border-box;">
+            <button id="play-pause-btn" class="action-btn small-btn" style="width:80px; font-size:14px; padding:8px; margin-top:0;">Play</button>
             <label class="mute-container">
                 <input type="checkbox" id="mute-toggle">
                 <span>Mute</span>
@@ -160,23 +215,6 @@
                     <button id="confirm-image-btn" class="action-btn" style="background-color:#4cd137; width:40px; margin-top:0; padding:8px">✔</button>
                 </div>
             </div>
-        </div>
-        <div id="canvas-tab" class="tab-content">
-            <h3>Canvas Cropping</h3>
-            <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; margin-bottom:15px">
-                <button class="action-btn small-btn ratio-btn" data-ratio="16/9" style="width:calc(50% - 5px); margin-top:0">16:9</button>
-                <button class="action-btn small-btn ratio-btn" data-ratio="9/16" style="width:calc(50% - 5px); margin-top:0">9:16</button>
-                <button class="action-btn small-btn ratio-btn" data-ratio="1/1" style="width:calc(50% - 5px); margin-top:0">1:1</button>
-                <button class="action-btn small-btn ratio-btn" data-ratio="4/5" style="width:calc(50% - 5px); margin-top:0">4:5</button>
-            </div>
-            <div style="display:flex; justify-content:flex-end">
-                <button id="confirm-crop-btn" class="action-btn" style="background-color:#2ecc71; width:40px; margin-top:0; padding:8px; display:none;">✔</button>
-            </div>
-        </div>
-
-        <div id="shapes-tab" class="tab-content">
-            <h3>Target Tracking</h3>
-            <button id="add-box-btn" class="action-btn">Add Target Box</button>
             
             <div id="shape-edit-panel" style="display:none; margin-top:10px; padding:10px 15px">
                 <h4 style="margin-bottom:10px; color:#aaa">Target Properties</h4>
@@ -208,6 +246,48 @@
                     </div>
                 </div>
             </div>
+        </div>
+        
+        <div id="canvas-tab" class="tab-content">
+            <h3>Cropping</h3>
+            <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; margin-bottom:15px">
+                <button class="action-btn small-btn ratio-btn" data-ratio="16/9" style="width:calc(50% - 5px); margin-top:0">16:9</button>
+                <button class="action-btn small-btn ratio-btn" data-ratio="9/16" style="width:calc(50% - 5px); margin-top:0">9:16</button>
+                <button class="action-btn small-btn ratio-btn" data-ratio="1/1" style="width:calc(50% - 5px); margin-top:0">1:1</button>
+                <button class="action-btn small-btn ratio-btn" data-ratio="4/5" style="width:calc(50% - 5px); margin-top:0">4:5</button>
+            </div>
+            <div style="display:flex; justify-content:flex-end">
+                <button id="confirm-crop-btn" class="action-btn" style="background-color:#2ecc71; width:40px; margin-top:0; padding:8px; display:none;">✔</button>
+            </div>
+
+            <h3 style="margin-top:25px; padding-top:20px; border-top:1px solid #333">Letterboxing</h3>
+            
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:15px">
+                <span style="font-size:14px; color:#aaa">Color</span>
+                <input type="color" id="letterbox-color" value="#000000" style="width:50px; height:30px; cursor:pointer; background:none; border:1px solid #555">
+            </div>
+            
+            <div style="display:flex; gap:10px; margin-bottom:15px">
+                <button id="add-horizontal-bars" class="action-btn small-btn" style="margin-top:0; background-color:#34495e; flex:1">Horizontal</button>
+                <button id="add-vertical-bars" class="action-btn small-btn" style="margin-top:0; background-color:#34495e; flex:1">Vertical</button>
+                
+                <button id="edit-letterbox-btn" class="action-btn small-btn" style="margin-top:0; width:50px; display:none; padding:4px; background-color:#f39c12">Edit</button>
+                <button id="clear-letterbox-btn" class="action-btn small-btn remove-btn" style="margin-top:0; width:30px; display:none; padding:4px;" title="Remove Letterbox">✖</button>
+                <button id="apply-letterbox-btn" class="action-btn small-btn" style="background-color:#4cd137; width:30px; margin-top:0; padding:4px; display:none;" title="Apply Letterbox">✔</button>
+            </div>
+
+            <div id="letterbox-controls" style="display:none; flex-direction:column; gap:10px;">
+                <div style="display:flex; justify-content:space-between; font-size:12px; color:#aaa;">
+                    <span>Thickness</span>
+                    <span id="letterbox-thickness-val">10%</span>
+                </div>
+                <input type="range" id="letterbox-thickness" min="1" max="50" value="10" style="width:100%;">
+            </div>
+        </div>
+
+        <div id="shapes-tab" class="tab-content">
+            <h3>Target Tracking</h3>
+            <button id="add-box-btn" class="action-btn">Add Target Box</button>
         </div>
 
         <div id="export-tab" class="tab-content">

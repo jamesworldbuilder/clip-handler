@@ -6,6 +6,28 @@ import { openTextEditor, openShapeEditor, openImageEditor, renderLayersUI, switc
 export let stage = null
 export let transformer = null
 
+// global state variables for letterboxing overlay
+export let letterboxLayer = null
+let bar1 = null
+let bar2 = null
+export let currentLetterbox = { type: 'none', thickness: 10, color: '#000000' }
+
+// distinct states for previewing vs applying a crop
+export let previewCropRatio = null
+export let activeCropRatio = null
+
+// updates preview crop state and forces a stage recalculation
+export function setCropRatio(ratio) {
+    previewCropRatio = ratio
+    syncCanvasToVideo()
+}
+
+// locks in the previewed aspect ratio to the canvas
+export function applyCrop() {
+    activeCropRatio = previewCropRatio
+    syncCanvasToVideo()
+}
+
 // initializes konva stage and attaches transformer
 export function initCanvas() {
     const container = document.getElementById('canvas-container')
@@ -29,6 +51,8 @@ export function initCanvas() {
         borderDash: [5, 5]
     })
     mainLayer.add(transformer)
+    // snap dimensions immediately on load
+    syncCanvasToVideo()
 }
 
 // drops transformer and disables dragging to lock object
@@ -77,6 +101,16 @@ export function addTextObject() {
     
     textNode.x((stage.width() / 2) - (textNode.width() / 2))
     textNode.y((stage.height() / 2) - (textNode.height() / 2))
+
+    // changes cursor to indicate node is draggable
+    textNode.on('mouseenter', () => {
+        stage.container().style.cursor = 'move'
+    })
+    
+    // restores default cursor when pointer leaves node area
+    textNode.on('mouseleave', () => {
+        stage.container().style.cursor = 'default'
+    })
 
     txtLayerData.konvaLayer.add(textNode)
     const objId = 'text_' + Date.now()
@@ -130,6 +164,16 @@ export function addShapeObject() {
     boxNode.x((stage.width() / 2) - (boxNode.width() / 2))
     boxNode.y((stage.height() / 2) - (boxNode.height() / 2))
 
+    // changes cursor to indicate node is draggable
+    boxNode.on('mouseenter', () => {
+        stage.container().style.cursor = 'move'
+    })
+    
+    // restores default cursor when pointer leaves node area
+    boxNode.on('mouseleave', () => {
+        stage.container().style.cursor = 'default'
+    })
+
     trackLayerData.konvaLayer.add(boxNode)
     const objId = 'shape_' + Date.now()
 
@@ -181,6 +225,16 @@ export function addImageObject() {
     
     imgNode.x(stage.width() / 2)
     imgNode.y(stage.height() / 2)
+
+    // changes cursor to indicate node is draggable
+    imgNode.on('mouseenter', () => {
+        stage.container().style.cursor = 'move'
+    })
+    
+    // restores default cursor when pointer leaves node area
+    imgNode.on('mouseleave', () => {
+        stage.container().style.cursor = 'default'
+    })
 
     imgLayerData.konvaLayer.add(imgNode)
     const objId = 'image_' + Date.now()
@@ -238,4 +292,170 @@ export function removeLayer(layerId) {
         confirmSelection()
         renderLayersUI()
     }
+}
+
+// calculates responsive bounding box and snaps canvas directly to rendered pixels
+export function syncCanvasToVideo() {
+    const video = document.getElementById('main-video')
+    const canvasContainer = document.getElementById('canvas-container')
+    const cropBox = document.getElementById('crop-preview-box')
+
+    if (!video || !video.videoWidth) return
+
+    // 1. Calculate native base dimensions (the physical space the video takes up)
+    const videoRatio = video.videoWidth / video.videoHeight
+    const elementRatio = video.clientWidth / video.clientHeight
+
+    let baseRenderWidth, baseRenderHeight
+
+    if (elementRatio > videoRatio) {
+        baseRenderHeight = video.clientHeight
+        baseRenderWidth = baseRenderHeight * videoRatio
+    } else {
+        baseRenderWidth = video.clientWidth
+        baseRenderHeight = baseRenderWidth / videoRatio
+    }
+
+    // 2. Apply APPLIED crop ratio bounding box limits (for canvas and mask)
+    let finalRenderWidth = baseRenderWidth
+    let finalRenderHeight = baseRenderHeight
+
+    if (activeCropRatio !== null) {
+        const currentRatio = baseRenderWidth / baseRenderHeight
+
+        if (currentRatio > activeCropRatio) {
+            // Native video is wider than the crop target -> constrain by height
+            finalRenderHeight = baseRenderHeight
+            finalRenderWidth = finalRenderHeight * activeCropRatio
+        } else {
+            // Native video is taller than the crop target -> constrain by width
+            finalRenderWidth = baseRenderWidth
+            finalRenderHeight = finalRenderWidth / activeCropRatio
+        }
+    }
+
+    // 3. Center the applied canvas perfectly within the video element
+    const offsetX = (video.clientWidth - finalRenderWidth) / 2
+    const offsetY = (video.clientHeight - finalRenderHeight) / 2
+
+    if (canvasContainer) {
+        canvasContainer.style.width = `${finalRenderWidth}px`
+        canvasContainer.style.height = `${finalRenderHeight}px`
+        canvasContainer.style.left = `${offsetX}px`
+        canvasContainer.style.top = `${offsetY}px`
+    }
+
+    // resizes the actual Konva stage instance to match the APPLIED crop
+    if (stage) {
+        stage.width(finalRenderWidth)
+        stage.height(finalRenderHeight)
+    }
+
+    // 4. MASK THE VIDEO using a robust solid blackout box-shadow
+    if (video) {
+        video.style.clipPath = 'none' 
+    }
+    
+    let blackoutMask = document.getElementById('applied-crop-mask')
+    if (!blackoutMask && canvasContainer) {
+        blackoutMask = document.createElement('div')
+        blackoutMask.id = 'applied-crop-mask'
+        blackoutMask.style.position = 'absolute'
+        blackoutMask.style.boxShadow = '0 0 0 9999px #000'
+        blackoutMask.style.pointerEvents = 'none'
+        blackoutMask.style.zIndex = '1' // places mask above the video, but below the canvas interactions
+        canvasContainer.parentNode.insertBefore(blackoutMask, canvasContainer)
+    }
+
+    if (blackoutMask) {
+        if (activeCropRatio !== null) {
+            blackoutMask.style.display = 'block'
+            blackoutMask.style.width = `${finalRenderWidth}px`
+            blackoutMask.style.height = `${finalRenderHeight}px`
+            blackoutMask.style.left = `${offsetX}px`
+            blackoutMask.style.top = `${offsetY}px`
+        } else {
+            blackoutMask.style.display = 'none'
+        }
+    }
+
+    // 5. Calculate PREVIEW crop boundary box
+    let previewWidth = baseRenderWidth
+    let previewHeight = baseRenderHeight
+
+    if (previewCropRatio !== null) {
+        const currentRatio = baseRenderWidth / baseRenderHeight
+
+        if (currentRatio > previewCropRatio) {
+            previewHeight = baseRenderHeight
+            previewWidth = previewHeight * previewCropRatio
+        } else {
+            previewWidth = baseRenderWidth
+            previewHeight = previewWidth / previewCropRatio
+        }
+    }
+
+    // position and size the preview boundary box
+    if (cropBox) {
+        const previewOffsetX = (video.clientWidth - previewWidth) / 2
+        const previewOffsetY = (video.clientHeight - previewHeight) / 2
+        
+        cropBox.style.width = `${previewWidth}px`
+        cropBox.style.height = `${previewHeight}px`
+        cropBox.style.left = `${previewOffsetX}px`
+        cropBox.style.top = `${previewOffsetY}px`
+        
+        // hide the preview box if the crop has already been applied
+        if (previewCropRatio !== null && previewCropRatio !== activeCropRatio) {
+            cropBox.style.display = 'block'
+        } else {
+            cropBox.style.display = 'none'
+        }
+    }
+
+    // recalculates overlay bars to match new stage dimensions
+    if (currentLetterbox && currentLetterbox.type !== 'none') {
+        applyLetterbox(currentLetterbox.type, currentLetterbox.thickness, currentLetterbox.color)
+    }
+}
+
+// TODO: Fix this broken crap
+// renders static overlay bars on stage and updates global state
+export function applyLetterbox(type, thicknessPct, color) {
+    if (!stage) return
+
+    currentLetterbox = { type, thickness: Number(thicknessPct), color }
+
+    if (!letterboxLayer) {
+        letterboxLayer = new Konva.Layer()
+        bar1 = new Konva.Rect({ listening: false })
+        bar2 = new Konva.Rect({ listening: false })
+        letterboxLayer.add(bar1)
+        letterboxLayer.add(bar2)
+        stage.add(letterboxLayer)
+    }
+
+    letterboxLayer.moveToTop()
+
+    const w = stage.width()
+    const h = stage.height()
+    
+    bar1.fill(color)
+    bar2.fill(color)
+
+    // Maps exactly to the applied canvas boundaries 
+    if (type === 'horizontal') {
+        const barHeight = Math.ceil(h * (currentLetterbox.thickness / 100))
+        bar1.setAttrs({ x: 0, y: 0, width: w, height: barHeight, visible: true })
+        bar2.setAttrs({ x: 0, y: h - barHeight, width: w, height: barHeight, visible: true })
+    } else if (type === 'vertical') {
+        const barWidth = Math.ceil(w * (currentLetterbox.thickness / 100))
+        bar1.setAttrs({ x: 0, y: 0, width: barWidth, height: h, visible: true })
+        bar2.setAttrs({ x: w - barWidth, y: 0, width: barWidth, height: h, visible: true })
+    } else {
+        bar1.visible(false)
+        bar2.visible(false)
+    }
+    
+    letterboxLayer.draw()
 }
