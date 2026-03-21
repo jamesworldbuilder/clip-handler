@@ -343,6 +343,10 @@ export function syncCanvasToVideo() {
         canvasContainer.style.height = `${finalRenderHeight}px`
         canvasContainer.style.left = `${offsetX}px`
         canvasContainer.style.top = `${offsetY}px`
+
+        // strips dynamic clip-path values via important flag
+        canvasContainer.style.setProperty('clip-path', 'none', 'important')
+        canvasContainer.style.setProperty('-webkit-clip-path', 'none', 'important')
     }
 
     // resizes the actual Konva stage instance to match the APPLIED crop
@@ -419,43 +423,40 @@ export function syncCanvasToVideo() {
     }
 }
 
-// TODO: Fix this broken crap
-// renders static overlay bars on stage and updates global state
+// reconstructs letterboxing layer mapped to exact stage dimensions
 export function applyLetterbox(type, thicknessPct, color) {
     if (!stage) return
 
     currentLetterbox = { type, thickness: Number(thicknessPct), color }
 
-    if (!letterboxLayer) {
-        letterboxLayer = new Konva.Layer()
-        bar1 = new Konva.Rect({ listening: false })
-        bar2 = new Konva.Rect({ listening: false })
-        letterboxLayer.add(bar1)
-        letterboxLayer.add(bar2)
-        stage.add(letterboxLayer)
+    if (letterboxLayer) {
+        letterboxLayer.destroy()
+        letterboxLayer = null
     }
 
+    if (type === 'none') return
+
+    letterboxLayer = new Konva.Layer()
+    stage.add(letterboxLayer)
     letterboxLayer.moveToTop()
 
     const w = stage.width()
     const h = stage.height()
-    
-    bar1.fill(color)
-    bar2.fill(color)
 
-    // Maps exactly to the applied canvas boundaries 
+    const bar1 = new Konva.Rect({ fill: color, listening: false })
+    const bar2 = new Konva.Rect({ fill: color, listening: false })
+
     if (type === 'horizontal') {
         const barHeight = Math.ceil(h * (currentLetterbox.thickness / 100))
-        bar1.setAttrs({ x: 0, y: 0, width: w, height: barHeight, visible: true })
-        bar2.setAttrs({ x: 0, y: h - barHeight, width: w, height: barHeight, visible: true })
+        bar1.setAttrs({ x: 0, y: 0, width: w, height: barHeight })
+        bar2.setAttrs({ x: 0, y: h - barHeight, width: w, height: barHeight })
     } else if (type === 'vertical') {
         const barWidth = Math.ceil(w * (currentLetterbox.thickness / 100))
-        bar1.setAttrs({ x: 0, y: 0, width: barWidth, height: h, visible: true })
-        bar2.setAttrs({ x: w - barWidth, y: 0, width: barWidth, height: h, visible: true })
-    } else {
-        bar1.visible(false)
-        bar2.visible(false)
+        bar1.setAttrs({ x: 0, y: 0, width: barWidth, height: h })
+        bar2.setAttrs({ x: w - barWidth, y: 0, width: barWidth, height: h })
     }
-    
+
+    letterboxLayer.add(bar1)
+    letterboxLayer.add(bar2)
     letterboxLayer.draw()
 }
