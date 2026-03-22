@@ -1,7 +1,7 @@
 // handles konvajs rendering and object placement
 import { video } from './dom-elements.js'
 import { appLayers, activeNode, setActiveNode, clearActiveNode } from './state-manager.js'
-import { openTextEditor, openShapeEditor, openImageEditor, renderLayersUI, switchTab } from './sidebar-ui.js'
+import { openTextEditor, openShapeEditor, openImageEditor, openFilterEditor, renderLayersUI, switchTab } from './sidebar-ui.js'
 
 export let stage = null
 export let transformer = null
@@ -63,11 +63,21 @@ export function confirmSelection() {
     if (transformer) {
         transformer.nodes([])
     }
-    document.getElementById('text-edit-panel').style.display = 'none'
-    document.getElementById('shape-edit-panel').style.display = 'none'
-    document.getElementById('image-edit-panel').style.display = 'none'
+    
+    // Safely moves panels back to the root tab to prevent destruction during UI redraws
+    const layersTab = document.getElementById('layers-tab')
+    const panels = ['text-edit-panel', 'shape-edit-panel', 'image-edit-panel', 'filter-edit-panel']
+    
+    panels.forEach(id => {
+        const panel = document.getElementById(id)
+        if (panel) {
+            panel.style.display = 'none'
+            if (layersTab) layersTab.appendChild(panel)
+        }
+    })
+
     clearActiveNode()
-    renderLayersUI()
+    if (typeof renderLayersUI === 'function') renderLayersUI()
 }
 
 // spawns text object in editable state and updates layer state
@@ -257,6 +267,68 @@ export function addImageObject() {
     openImageEditor(imgNode)
 }
 
+// spawns full canvas filter object and updates layer state
+export function addFilterObject() {
+    if (activeNode) return
+
+    const video = document.getElementById('main-video')
+    video.pause()
+    document.getElementById('play-pause-btn').innerText = 'Play'
+    
+    let filterLayerData = appLayers.find(l => l.name === 'Filter Layer')
+    if (!filterLayerData) {
+        const newKonvaLayer = new Konva.Layer()
+        stage.add(newKonvaLayer)
+        
+        // forces letterboxing layer to render above filter layer
+        if (letterboxLayer) letterboxLayer.moveToTop()
+
+        filterLayerData = { id: 'layer_filter', name: 'Filter Layer', type: 'filter', visible: true, locked: false, objects: [], konvaLayer: newKonvaLayer }
+        appLayers.push(filterLayerData)
+    }
+
+    const newNum = filterLayerData.objects.length + 1
+    const defaultName = `Filter ${newNum}`
+
+    // configures konva rectangle as a transparent timeline proxy
+    const filterNode = new Konva.Rect({
+        x: 0,
+        y: 0,
+        width: stage.width(),
+        height: stage.height(),
+        fill: 'transparent',
+        listening: false,
+        draggable: false,
+        name: defaultName
+    })
+
+    // defaults to none
+    filterNode.setAttr('filterType', 'none')
+    filterLayerData.konvaLayer.add(filterNode)
+    const objId = 'filter_' + Date.now()
+    filterNode.id(objId)
+
+    // spans interval from absolute zero to end of video file
+    const startT = 0
+    const endT = video.duration && !isNaN(video.duration) ? video.duration : 100 
+
+    filterLayerData.objects.push({ 
+        id: objId, 
+        name: defaultName, 
+        node: filterNode, 
+        visible: true, 
+        locked: false,
+        startTime: startT,
+        endTime: endT,
+        timeLocked: false 
+    })
+    
+    switchTab('layers-tab')
+    
+    // executes native module function to bypass window binding
+    openFilterEditor(filterNode)
+}
+
 // handles targeted object destruction and layer cleanup
 export function removeObject(layerName, objId) {
     const layerIdx = appLayers.findIndex(l => l.name === layerName)
@@ -278,6 +350,10 @@ export function removeObject(layerName, objId) {
             
             confirmSelection()
             renderLayersUI()
+            
+            // Forces video to drop the CSS filter when the object is deleted
+            const video = document.getElementById('main-video')
+            if (video) video.dispatchEvent(new Event('timeupdate'))
         }
     }
 }
@@ -291,6 +367,10 @@ export function removeLayer(layerId) {
         appLayers.splice(layerIdx, 1)
         confirmSelection()
         renderLayersUI()
+        
+        // Forces video to drop the CSS filters when the entire layer is deleted
+        const video = document.getElementById('main-video')
+        if (video) video.dispatchEvent(new Event('timeupdate'))
     }
 }
 
@@ -354,6 +434,18 @@ export function syncCanvasToVideo() {
         stage.width(finalRenderWidth)
         stage.height(finalRenderHeight)
     }
+
+    // Force all filter nodes to dynamically match the new stage dimensions
+    appLayers.forEach(layer => {
+        if (layer.type === 'filter') {
+            layer.objects.forEach(obj => {
+                if (obj.node) {
+                    obj.node.width(finalRenderWidth)
+                    obj.node.height(finalRenderHeight)
+                }
+            })
+        }
+    })
 
     // 4. MASK THE VIDEO using a robust solid blackout box-shadow
     if (video) {
@@ -459,4 +551,14 @@ export function applyLetterbox(type, thicknessPct, color) {
     letterboxLayer.add(bar1)
     letterboxLayer.add(bar2)
     letterboxLayer.draw()
+}
+
+// natively forces system overlays to absolute top of konva stage to bypass circular import failures
+export function forceSystemOverlaysToTop() {
+    if (typeof transformer !== 'undefined' && transformer && transformer.getLayer()) {
+        transformer.getLayer().moveToTop()
+    }
+    if (typeof letterboxLayer !== 'undefined' && letterboxLayer) {
+        letterboxLayer.moveToTop()
+    }
 }

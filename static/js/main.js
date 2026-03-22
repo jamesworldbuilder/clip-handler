@@ -1,7 +1,7 @@
 // imports core dependencies and initialization functions
 import { video } from './dom-elements.js'
 import { initTransport } from './transport-controls.js'
-import { initCanvas, addTextObject, addShapeObject, addImageObject, confirmSelection, syncCanvasToVideo, applyLetterbox, setCropRatio, applyCrop } from './canvas-engine.js'
+import { initCanvas, addTextObject, addShapeObject, addImageObject, addFilterObject, confirmSelection, syncCanvasToVideo, applyLetterbox, setCropRatio, applyCrop } from './canvas-engine.js'
 import { initSidebarBindings, switchTab } from './sidebar-ui.js'
 import { activeNode, appLayers } from './state-manager.js'
 
@@ -13,9 +13,11 @@ setInterval(() => {
 document.getElementById('add-text-btn').addEventListener('click', addTextObject)
 document.getElementById('add-image-btn').addEventListener('click', addImageObject)
 document.getElementById('add-box-btn').addEventListener('click', addShapeObject)
+document.getElementById('add-filter-btn').addEventListener('click', addFilterObject)
 document.getElementById('confirm-text-btn').addEventListener('click', confirmSelection)
 document.getElementById('confirm-shape-btn').addEventListener('click', confirmSelection)
 document.getElementById('confirm-image-btn').addEventListener('click', confirmSelection)
+document.getElementById('confirm-filter-btn').addEventListener('click', confirmSelection)
 
 document.getElementById('process-tracking-btn').addEventListener('click', () => {
     if (!activeNode) return
@@ -210,9 +212,10 @@ if (confirmCropBtn) {
     })
 }
 
-// evaluates object timestamps against current video playback time to adjust visibility
+// evaluates object timestamps against current video playback time to adjust visibility and apply visual filters
 function syncObjectVisibility() {
     const currentTime = video.currentTime
+    let activeFilters = []
     
     appLayers.forEach(layer => {
         if (layer.type === 'base') return
@@ -220,12 +223,32 @@ function syncObjectVisibility() {
         layer.objects.forEach(obj => {
             const isWithinInterval = currentTime >= obj.startTime && currentTime <= obj.endTime
             
-            // overrides playback visibility if manual toggle is disengaged
-            if (obj.visible) {
+            // checks parent layer and individual object visibility
+            if (obj.visible && layer.visible) {
                 obj.node.opacity(isWithinInterval ? 1 : 0)
+                
+                // dynamically builds chained css string based on z-axis object order
+                if (layer.type === 'filter' && isWithinInterval) {
+                    const fType = obj.node.getAttr('filterType')
+                    if (fType === 'none') {
+                        // "None" acts as a reset/mask, wiping out all effects beneath it
+                        activeFilters = []
+                    } else if (fType === 'grayscale') {
+                        activeFilters.push('grayscale(100%)')
+                    } else if (fType === 'sepia') {
+                        activeFilters.push('sepia(100%)')
+                    } else if (fType === 'invert') {
+                        activeFilters.push('invert(100%)')
+                    }
+                }
+            } else {
+                obj.node.opacity(0)
             }
         })
     })
+    
+    // Applies accumulated filters to the video sequentially
+    video.style.filter = activeFilters.length > 0 ? activeFilters.join(' ') : 'none'
 }
 
 // binds synchronization check to native html video time updates

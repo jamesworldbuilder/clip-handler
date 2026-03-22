@@ -1,5 +1,5 @@
 import { appLayers, activeNode, setActiveNode, activeLayerId, setActiveLayerId } from './state-manager.js'
-import { transformer, confirmSelection, removeObject, removeLayer } from './canvas-engine.js'
+import { transformer, confirmSelection, removeObject, removeLayer, letterboxLayer, forceSystemOverlaysToTop } from './canvas-engine.js'
 
 // svg string for visibility eye icon
 const eyeIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`
@@ -88,19 +88,6 @@ function updateTimePanelUI(activeObj) {
     }
 }
 
-function updateKonvaZIndex() {
-    appLayers.forEach((layer, index) => {
-        if (layer.konvaLayer) layer.konvaLayer.setZIndex(index)
-    })
-}
-
-function updateObjectZIndex(layer) {
-    if (!layer || !layer.objects) return
-    layer.objects.forEach((obj, index) => {
-        if (obj.node) obj.node.setZIndex(index)
-    })
-}
-
 export function switchTab(tabId) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'))
     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'))
@@ -135,6 +122,55 @@ export function openImageEditor(node) {
     transformer.nodes([node])
     renderLayersUI()
 }
+
+export function openFilterEditor(node) {
+    const panel = document.getElementById('filter-edit-panel')
+    const layersTab = document.getElementById('layers-tab')
+
+    if (typeof activeNode !== 'undefined' && activeNode && activeNode.id() === node.id() && panel.style.display === 'block') {
+        panel.style.display = 'none'
+        if (layersTab) layersTab.appendChild(panel)
+        if (typeof clearActiveNode === 'function') clearActiveNode()
+        if (typeof renderLayersUI === 'function') renderLayersUI()
+        return
+    }
+
+    if (typeof setActiveNode === 'function') setActiveNode(node)
+    
+    if (panel && layersTab) {
+        layersTab.appendChild(panel)
+    }
+
+    if (typeof renderLayersUI === 'function') renderLayersUI()
+    
+    document.getElementById('text-edit-panel').style.display = 'none'
+    document.getElementById('image-edit-panel').style.display = 'none'
+    document.getElementById('shape-edit-panel').style.display = 'none'
+    
+    panel.style.display = 'block'
+    
+    const dropdown = document.getElementById('edit-filter-type')
+    if (dropdown) dropdown.value = node.getAttr('filterType') || 'none'
+    
+    if (dropdown) {
+        dropdown.onchange = (e) => {
+            const type = e.target.value
+            node.setAttr('filterType', type)
+            
+            const video = document.getElementById('main-video')
+            if (video) video.dispatchEvent(new Event('timeupdate'))
+        }
+    }
+
+    setTimeout(() => {
+        const activeListItem = document.querySelector('.list-item.active-item')
+        if (activeListItem && panel) {
+            activeListItem.parentNode.insertBefore(panel, activeListItem.nextSibling)
+        }
+    }, 10)
+}
+
+window.openFilterEditor = openFilterEditor
 
 function toggleVisibility(layerId, e) {
     e.stopPropagation()
@@ -212,7 +248,6 @@ export function renderMultiTrackTimeline() {
     appLayers.forEach(layer => {
         if (layer.type === 'base') return
         
-        // Reverse the objects so the vertical stacking perfectly matches the Layers tab
         const reversedObjects = [...layer.objects].reverse()
         
         reversedObjects.forEach(obj => {
@@ -227,17 +262,19 @@ export function renderMultiTrackTimeline() {
             block.style.left = startPct + '%'
             block.style.width = widthPct + '%'
             
-            let bgColor = '#00a8ff'
+            // Matches UI button colors exactly
+            let bgColor = '#00a8ff' // Text
             if (layer.type === 'image') bgColor = '#e1b12c'
             if (layer.type === 'tracking') bgColor = '#9b59b6'
+            if (layer.type === 'filter') bgColor = '#8e44ad'
+            
             block.style.backgroundColor = obj.timeLocked ? '#555' : bgColor
             
             const label = document.createElement('div')
             label.className = 'multi-track-label'
             
-            // extracts digits from object name to maintain numeric tracking
             const numericMatch = obj.name.match(/\d+/)
-            label.innerText = numericMatch ? numericMatch[0] : index + 1
+            label.innerText = numericMatch ? numericMatch[0] : ''
             
             block.appendChild(label)
             
@@ -251,6 +288,9 @@ export function renderMultiTrackTimeline() {
                 } else if (layer.type === 'image') {
                     switchTab('layers-tab')
                     openImageEditor(obj.node)
+                } else if (layer.type === 'filter') {
+                    switchTab('layers-tab')
+                    openFilterEditor(obj.node)
                 }
             }
             
@@ -432,28 +472,38 @@ export function renderTimelineIntervals() {
 export function renderLayersUI() {
     const container = document.getElementById('layers-container')
     
+    // 1. SAFELY RESCUE ALL PANELS
     const textPanel = document.getElementById('text-edit-panel')
     const shapePanel = document.getElementById('shape-edit-panel')
     const imagePanel = document.getElementById('image-edit-panel')
+    const filterPanel = document.getElementById('filter-edit-panel')
     const timePanel = document.getElementById('time-edit-panel')
     
-    if (textPanel) {
-        textPanel.style.display = 'none'
-        document.getElementById('layers-tab').appendChild(textPanel)
-    }
-    if (shapePanel) {
-        shapePanel.style.display = 'none'
-        document.getElementById('shapes-tab').appendChild(shapePanel)
-    }
-    if (imagePanel) {
-        imagePanel.style.display = 'none'
-        document.getElementById('layers-tab').appendChild(imagePanel)
-    }
-    if (timePanel) {
-        timePanel.style.display = 'none'
-        document.getElementById('layers-tab').appendChild(timePanel)
-    }
+    if (textPanel) { textPanel.style.display = 'none'; document.getElementById('layers-tab').appendChild(textPanel) }
+    if (shapePanel) { shapePanel.style.display = 'none'; document.getElementById('shapes-tab').appendChild(shapePanel) }
+    if (imagePanel) { imagePanel.style.display = 'none'; document.getElementById('layers-tab').appendChild(imagePanel) }
+    if (filterPanel) { filterPanel.style.display = 'none'; document.getElementById('layers-tab').appendChild(filterPanel) }
+    if (timePanel) { timePanel.style.display = 'none'; document.getElementById('layers-tab').appendChild(timePanel) }
     
+    // 2. ENFORCE MASTER Z-INDEX STACKING
+    // Loops sequentially through the arrays and moves elements to the top one by one, 
+    // guaranteeing the physical canvas perfectly aligns with the data structure.
+    appLayers.forEach(layer => {
+        if (layer.konvaLayer) layer.konvaLayer.moveToTop()
+        
+        if (layer.objects) {
+            layer.objects.forEach(obj => {
+                if (obj.node) obj.node.moveToTop()
+            })
+        }
+    })
+    
+    // 3. LOCK SYSTEM OVERLAYS (Natively executes inside canvas-engine)
+    // Ensures the UI transformer and visual letterbox mask sit completely above the user layers
+    if (typeof forceSystemOverlaysToTop === 'function') {
+        forceSystemOverlaysToTop()
+    }
+
     container.innerHTML = ''
 
     const reversedLayers = [...appLayers].reverse()
@@ -495,8 +545,11 @@ export function renderLayersUI() {
                 if (fromIdx > -1 && toIdx > -1) {
                     const [movedLayer] = appLayers.splice(fromIdx, 1)
                     appLayers.splice(toIdx, 0, movedLayer)
-                    updateKonvaZIndex()
                     renderLayersUI()
+
+                    // Syncs filters if a whole filter layer changes position
+                    const video = document.getElementById('main-video')
+                    if (video) video.dispatchEvent(new Event('timeupdate'))
                 }
             }
         })
@@ -666,8 +719,10 @@ export function renderLayersUI() {
                                     }
                                 }
                                 
-                                updateObjectZIndex(layer)
                                 renderLayersUI()
+                                // Re-evaluates CSS string order instantly upon drop
+                                const video = document.getElementById('main-video')
+                                if (video) video.dispatchEvent(new Event('timeupdate'))
                             }
                         }
                     }
@@ -773,6 +828,8 @@ export function renderLayersUI() {
                         } else if (layer.type === 'image') {
                             switchTab('layers-tab')
                             openImageEditor(obj.node)
+                        } else if (layer.type === 'filter') {
+                            openFilterEditor(obj.node)
                         }
                     }
                 }
@@ -808,6 +865,9 @@ export function renderLayersUI() {
                 } else if (layer.type === 'image' && imagePanel) {
                     imagePanel.style.display = 'block'
                     groupDiv.appendChild(imagePanel)
+                } else if (layer.type === 'filter' && filterPanel) {
+                    filterPanel.style.display = 'block'
+                    groupDiv.appendChild(filterPanel)
                 }
                 
                 if (timePanel) {
@@ -820,7 +880,7 @@ export function renderLayersUI() {
         container.appendChild(groupDiv)
     })
 
-    const creationButtons = ['add-text-btn', 'add-image-btn', 'add-box-btn']
+    const creationButtons = ['add-text-btn', 'add-image-btn', 'add-box-btn', 'add-filter-btn']
     creationButtons.forEach(id => {
         const btn = document.getElementById(id)
         if (btn) {
@@ -1046,8 +1106,15 @@ export function initSidebarBindings() {
             const leftPct = (leftInset / renderW) * 100
             
             const clipString = `inset(${topPct}% ${rightPct}% ${bottomPct}% ${leftPct}%)`
-            video.style.clipPath = clipString
-            canvasContainer.style.clipPath = clipString
+            
+            // Only applies clip-path to the background video
+            if (video) video.style.clipPath = clipString
+            
+            // Forces canvas to remain unclipped so letterboxing bars can reach the edges
+            if (canvasContainer) {
+                canvasContainer.style.clipPath = 'none'
+                canvasContainer.style.setProperty('clip-path', 'none', 'important')
+            }
             
             previewBox.style.display = 'none'
             confirmCropBtn.style.display = 'none'
