@@ -184,6 +184,10 @@ function toggleVisibility(layerId, e) {
             if (vid) vid.style.visibility = layer.visible ? 'visible' : 'hidden'
         }
         renderLayersUI()
+        
+        // NEW: Forces the video to instantly recalculate active filters
+        const vid = document.getElementById('main-video')
+        if (vid) vid.dispatchEvent(new Event('timeupdate'))
     }
 }
 
@@ -201,6 +205,10 @@ function toggleObjectVisibility(layerId, objId, e) {
                 if (vid) vid.style.visibility = obj.visible ? 'visible' : 'hidden'
             }
             renderLayersUI()
+            
+            // NEW: Forces the video to instantly recalculate active filters
+            const vid = document.getElementById('main-video')
+            if (vid) vid.dispatchEvent(new Event('timeupdate'))
         }
     }
 }

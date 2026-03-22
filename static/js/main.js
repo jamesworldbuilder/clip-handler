@@ -231,14 +231,11 @@ function syncObjectVisibility() {
                 if (layer.type === 'filter' && isWithinInterval) {
                     const fType = obj.node.getAttr('filterType')
                     if (fType === 'none') {
-                        // "None" acts as a reset/mask, wiping out all effects beneath it
+                        // "None" acts as a physical blackout mask, wiping out all effects beneath it in the stack
                         activeFilters = []
-                    } else if (fType === 'grayscale') {
-                        activeFilters.push('grayscale(100%)')
-                    } else if (fType === 'sepia') {
-                        activeFilters.push('sepia(100%)')
-                    } else if (fType === 'invert') {
-                        activeFilters.push('invert(100%)')
+                    } else if (fType) {
+                        // Dynamically scales to ANY filter name passed from your dropdown
+                        activeFilters.push(`${fType}(100%)`)
                     }
                 }
             } else {
