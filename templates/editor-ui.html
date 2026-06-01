@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clip-handler</title>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Pacifico&family=Righteous&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/konva@9.3.1/konva.min.js"></script>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box }
+
+        /* Establishes relative anchor for the entire absolute layout */
+        body { 
+            margin:0; padding:0; height:100vh; width:100vw; background-color:#111; 
+            color:#fff; font-family:sans-serif; overflow:hidden; position:relative; 
+        }
+
+        /* BLACK BOX */
+        #workspace { 
+            position:absolute; top:0; left:0; 
+            width:calc(100vw - 320px); height:calc(100vh - 130px); 
+            background-color:#000; display:flex; 
+            justify-content:center; align-items:flex-start; /* Anchors the wrapper to the top */
+            transition:width 0.2s, height 0.2s; 
+            overflow:hidden;
+            z-index:1;
+        }
+
+        /* GREY BOX */
+        #video-wrapper { 
+            position:relative; width:calc(100% - 40px); height:calc(100% - 40px); 
+            min-width:650px; min-height:400px; 
+            margin-top:20px; 
+            display:flex; 
+            justify-content:center; align-items:center; 
+            overflow:hidden; 
+        }
+
+        #main-video { width:100%; height:100%; object-fit:contain; display:block; z-index:1; }
+        #canvas-container { position:absolute; top:0; left:0; width:100%; height:100%; z-index:2; }
+        
+        #crop-preview-box { position:absolute; border:2px dashed #2ecc71; box-shadow:0 0 0 9999px rgba(0,0,0,0.7); cursor:move; z-index:4; display:none; }
+        
+        /* Tracking target box */
+        #tracking-target-box { display:none; position:absolute; border:2px dashed #00ff00; background:rgba(0,255,0,0.1); z-index:5; cursor:move; }
+
+        /* RED BOX: Anchored to bottom left, height adjusts upward */
+        #bottom-controls { 
+            position:absolute; bottom:0; left:0; 
+            width:calc(100vw - 320px); 
+            min-height:130px; height:auto; /* Swapped fixed height for auto-growth */
+            background-color:rgba(26, 26, 26, 0.95); border-top:1px solid #444; 
+            display:flex; flex-direction:column; z-index:10; transition:width 0.2s; 
+            backdrop-filter:blur(4px);
+        }
+
+        #transport-bar { height:60px; background-color:transparent; display:flex; align-items:center; justify-content:center; padding:0 20px; gap:25px; margin-top:auto; }
+
+        /* PURPLE BOX: Anchored to top right */
+        #sidebar { 
+            position:absolute; top:0; right:0; 
+            width:320px; height:100vh; 
+            background-color:#222; border-left:1px solid #333; 
+            display:flex; flex-direction:column; z-index:20; transition:width 0.2s; 
+        }
+        /* Minimalist sliding drawer handle */
+        #collapse-sidebar-bar { 
+            display: none; position: absolute; left: 0; top: 0; bottom: 0; width: 16px; 
+            background-color: #1e1e1e; border-right: 1px solid #111; cursor: pointer; 
+            z-index: 30; transition: background-color 0.2s; 
+        }
+        #collapse-sidebar-bar:hover { background-color: #2a2a2a; }
+        
+        /* Subtle dark arrow matching your reference image */
+        #collapse-sidebar-bar::before { 
+            content: "▶"; color: #444; position: absolute; top: 50%; left: 50%; 
+            transform: translate(-50%, -50%); font-size: 9px; pointer-events: none; transition: color 0.2s;
+        }
+        #collapse-sidebar-bar:hover::before { color: #888; }
+
+        #track-prop-alpha::-webkit-inner-spin-button, 
+        #track-prop-alpha::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        #track-prop-alpha { -moz-appearance: textfield; }
+
+        #edit-font-size::-webkit-inner-spin-button, #edit-font-size::-webkit-outer-spin-button,
+        #edit-text-transparency::-webkit-inner-spin-button, #edit-text-transparency::-webkit-outer-spin-button,
+        #edit-stroke-width::-webkit-inner-spin-button, #edit-stroke-width::-webkit-outer-spin-button,
+        #edit-shadow-blur::-webkit-inner-spin-button, #edit-shadow-blur::-webkit-outer-spin-button,
+        #edit-shadow-thickness::-webkit-inner-spin-button, #edit-shadow-thickness::-webkit-outer-spin-button,
+        #edit-text-width::-webkit-inner-spin-button, #edit-text-width::-webkit-outer-spin-button,
+        #edit-text-height::-webkit-inner-spin-button, #edit-text-height::-webkit-outer-spin-button,
+        #edit-shadow-angle::-webkit-inner-spin-button, #edit-shadow-angle::-webkit-outer-spin-button,
+        #image-shadow-blur::-webkit-inner-spin-button, #image-shadow-blur::-webkit-outer-spin-button,
+        #image-shadow-thickness::-webkit-inner-spin-button, #image-shadow-thickness::-webkit-outer-spin-button,
+        #image-width::-webkit-inner-spin-button, #image-width::-webkit-outer-spin-button,
+        #image-height::-webkit-inner-spin-button, #image-height::-webkit-outer-spin-button,
+        #image-shadow-angle::-webkit-inner-spin-button, #image-shadow-angle::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        #edit-font-size, #edit-text-transparency, #edit-stroke-width, #edit-shadow-blur, #edit-shadow-thickness, #edit-text-width, #edit-text-height, #edit-shadow-angle, #image-shadow-blur, #image-shadow-thickness, #image-width, #image-height, #image-shadow-angle { -moz-appearance: textfield; }
+
+        /* STAGE 1 (OVERLAP): Viewport is smaller than Video + UI */
+        @media (max-width: 970px), (max-height: 530px) {
+            #workspace {
+                justify-content: flex-start; /* Forces the video top-left, UI covers bottom-right */
+            }
+            #video-wrapper {
+                margin-left: 0; /* Allows the left edge to touch the left side of the page */
+            }
+        }
+
+        /* STAGE 2 (COLLAPSE): Trigger media query */
+        @media (max-width: 900px) and (max-height: 650px) {
+            #sidebar:not(.force-open) { width: 20px; cursor: pointer; min-width: 20px; }
+            #sidebar:not(.force-open) > * { display: none !important; }
+            
+            #sidebar:not(.force-open)::before { content: "◀"; color: #555; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 10px; pointer-events: none; }
+            
+            #sidebar.force-open { box-shadow: -10px 0 20px rgba(0,0,0,0.5); padding-left: 16px; }
+            #sidebar.force-open #collapse-sidebar-bar { display: block !important; }
+            
+            #bottom-controls { width: calc(100vw - 20px); }
+            #workspace { width: calc(100vw - 20px); }
+        }
+
+        /* --- UI Component Styles --- */
+        .tab-header { display:flex; background-color:#1e1e1e; border-bottom:1px solid #444 }
+        .tab-btn { flex:1; padding:10px; background:none; border:none; color:#aaa; cursor:pointer; font-weight:bold; font-size:12px; transition:0.2s }
+        .tab-btn:hover { color:#fff; background-color:#333 }
+        .tab-btn.active { color:#fff; border-bottom:2px solid #00a8ff; background-color:#2a2a2a }
+        .tab-content { padding:20px; display:none; flex:1; overflow-y:auto }
+        .tab-content.active { display:block }
+        
+        .layer-group { background-color:#222; border:1px solid #444; border-radius:4px; margin-bottom:10px; padding:10px }
+        .layer-group.drag-over { border-top:2px solid #00a8ff }
+        .layer-title { font-weight:bold; margin-bottom:10px; color:#00a8ff; border-bottom:1px solid #444; padding-bottom:5px }
+        
+        .layer-item { display:flex; align-items:center; background-color:#2a2a2a; padding:10px 15px; border-bottom:1px solid #1e1e1e; cursor:pointer; color:#aaa; user-select:none; transition:0.2s }
+        .layer-item:hover { background-color:#333 }
+        .layer-item.active { background-color:#4a4a4a; color:#fff }
+        .layer-item.active-parent { border-left:3px solid #00a8ff; background-color:#4a4a4a }
+        
+        .list-item { background-color:#333; padding:8px; margin-bottom:5px; border-radius:4px; display:flex; justify-content:space-between; align-items:center; font-size:14px }
+        .list-item.active-item { border-left:3px solid #00a8ff; background-color:#4a4a4a }
+        .list-item.drag-over { border-top:2px solid #00a8ff }
+        
+        .layer-icon { width:18px; height:18px; display:flex; justify-content:center; align-items:center; cursor:pointer; opacity:0.3; transition:0.2s }
+        .layer-icon:hover { opacity:0.8 }
+        .layer-icon.active { opacity:1; color:#fff }
+        .layer-icon.small { width:14px; height:14px }
+        .layer-name { flex:1; font-size:14px; margin-left:15px }
+        .layer-lock { margin-left:auto }
+        
+        .drag-handle { width:14px; height:14px; cursor:grab; opacity:0.5; margin-right:8px; display:inline-flex; align-items:center; transition:0.2s }
+        .drag-handle.disabled { opacity:0.2; cursor:not-allowed }
+        .drag-handle:not(.disabled):hover { opacity:1 }
+        .list-item:active .drag-handle:not(.disabled) { cursor:grabbing }
+        
+        .action-btn { background-color:#00a8ff; color:white; border:none; padding:6px 10px; border-radius:2px; cursor:pointer; font-weight:bold; font-size:13px; width:100%; margin-top:10px; letter-spacing:0.5px }
+        .action-btn:hover { background-color:#0097e6 }
+        .small-btn { padding:4px 8px; font-size:11px; margin-top:0; width:auto }
+        .remove-btn { background-color:#e84118 }
+        .remove-btn:hover { background-color:#c23616 }
+        .panel-input { width:100%; padding:8px; margin-bottom:10px; background:#1e1e1e; border:1px solid #555; color:#fff }
+        
+        .scrubber-container { width:100%; position:relative; display:flex; align-items:center; height:20px; cursor:pointer }
+        .scrubber-container:hover input[type=range]::-webkit-slider-runnable-track { height:6px }
+        .scrubber-container:hover #scrubber-track-bg { height:6px }
+        #scrubber-track-bg { position:absolute; left:0; top:50%; transform:translateY(-50%); height:4px; width:100%; background:#ff0000; z-index:1; pointer-events:none; transition:height 0.1s }
+
+        input[type=range] { -webkit-appearance:none; width:calc(100% + 4px); margin-left:-2px; background:transparent; position:absolute; z-index:3; outline:none }
+        input[type=range]::-webkit-slider-runnable-track { width:100%; height:4px; cursor:pointer; background:transparent; transition:height 0.1s }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; height:24px; width:4px; border-radius:0; border:none; background:#f1c40f; cursor:pointer; margin-top:-10px; box-shadow:0 0 3px rgba(0,0,0,0.8) }
+        input[type=range]::-moz-range-thumb { height:24px; width:4px; border-radius:0; border:none; background:#f1c40f; cursor:pointer; box-shadow:0 0 3px rgba(0,0,0,0.8) }
+
+        #scrubber-progress { position:absolute; left:0; top:50%; transform:translateY(-50%); height:4px; background:#f1c40f; z-index:2; pointer-events:none; transition:height 0.1s }
+        
+        /* Forces both tooltips to vanish immediately upon double-click */
+        .scrubber-container.hide-hint #scrubber-tooltip,
+        .scrubber-container.hide-hint #hover-tooltip { opacity: 0 !important; visibility: hidden; }
+
+        #scrubber-tooltip { position:absolute; top:-38px; background:rgba(0,0,0,0.8); color:#f1c40f; padding:4px 8px; border-radius:4px; font-size:12px; font-family:monospace; pointer-events:none; opacity:0; transform:translateX(-50%); z-index:5; white-space:nowrap; text-align:center; transition:opacity 0.1s; }
+        #scrubber-tooltip::after { content: "<< double-click"; display: none; color: grey; font-size: 10px; margin-top: 2px; }
+        .scrubber-container.hover-handle:not(.hide-hint) #scrubber-tooltip::after { display: block; }
+
+        /* Restored original height: hover tooltip no longer carries the double-click hint */
+        #hover-tooltip { position:absolute; top:-25px; background:rgba(0,0,0,0.8); color:#aaaaaa; padding:4px 8px; border-radius:4px; font-size:12px; font-family:monospace; pointer-events:none; opacity:0; transform:translateX(-50%); z-index:4; white-space:nowrap; text-align:center; transition:opacity 0.1s; }
+
+        .mute-container { display:flex; align-items:center; gap:8px; cursor:pointer }
+        .mute-container input { cursor:pointer; width:18px; height:18px }
+
+        /* time segment spinner styles */
+        .time-spinner-group { display:inline-flex; background:#1e1e1e; border:1px solid #555; padding:6px; font-family:monospace; font-size:12px; user-select:none }
+        .time-spinner-group.disabled { opacity:0.5; pointer-events:none }
+        .time-segment { cursor:ns-resize; padding:0 2px; color:#fff; transition:color 0.1s }
+        .time-segment.active-segment { color:#00a8ff; background:rgba(0,168,255,0.1); border-radius:2px }        
+        .time-segment:hover { color:#00a8ff }
+
+        .multi-track-lane { width:100%; height:12px; background-color:#111; position:relative; border-radius:2px; overflow:hidden; margin-bottom:2px }
+        .multi-track-block { position:absolute; height:100%; top:0; border-radius:2px; cursor:pointer; opacity:0.7; transition:opacity 0.2s }
+        .multi-track-block:hover { opacity:1 }
+        .multi-track-label { position:absolute; left:5px; top:0; font-size:9px; color:#fff; line-height:12px; pointer-events:none; z-index:3; text-shadow:0 0 2px #000; white-space:nowrap }
+
+        /* Expands multi-track timeline lanes to safely fit text content */
+        .layer-track-row, .multi-track-lane {
+            height: 40px !important;
+        }
+        .multi-track-block {
+            height: 26px !important; /* Decreased height */
+            line-height: 26px !important;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="workspace">
+        <div id="video-wrapper">
+            <video id="main-video">
+                <source src="/raw-clips/{{ request.args.get('file', 'placeholder.mp4') }}" type="video/mp4">
+            </video>
+            <div id="filter-mask-layer" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:1; display:none;"></div>
+            <div id="canvas-container"></div>
+            <div id="crop-preview-box"></div>
+            
+            <div id="tracking-target-box"></div>
+        </div>
+    </div>
+    
+    <div id="bottom-controls">
+        <div style="width:100%; display:flex; flex-direction:column; padding:15px 20px 0 20px; box-sizing:border-box;">
+            <div id="zoom-sync-wrap" style="width:100%; overflow-x:hidden; padding-top:40px; margin-top:-40px; padding-bottom:5px; margin-bottom:-5px;">
+                <div id="zoom-scale-target" style="width:100%; transform-origin:left center; transition:width 0.2s;">
+                    <div class="scrubber-container" id="scrubber-wrap" style="height:20px; width:100%; position:relative">
+                        <div id="scrubber-tooltip">00:00:00 / 00:00:00</div>
+                        <div id="hover-tooltip">00:00:00</div>
+                        <div id="scrubber-track-bg"></div>
+                        <div id="scrubber-progress" style="width:0%"></div>
+                        <input type="range" id="timeline-scrubber" value="0" min="0" step="0.001">
+                    </div>
+                    <div id="active-obj-lane" style="width:100%; height:12px; background-color:#111; margin-top:2px; margin-bottom:5px; position:relative; border-radius:2px; overflow:visible"></div>
+                </div>
+            </div>
+            
+            <button id="toggle-multi-track-btn" style="background:none; border:none; color:#aaa; cursor:pointer; font-size:10px; text-align:left; padding:2px 0; margin-bottom:5px; width:fit-content">▼ Show All Tracks</button>
+            <div id="multi-track-container" style="display:none; flex-direction:column; width:100%; max-height:100px; overflow-y:auto; margin-bottom:5px"></div>
+        </div>
+
+        <div id="transport-bar" style="border-top:1px solid #444; box-sizing:border-box;">
+            <button id="play-pause-btn" class="action-btn small-btn" style="width:80px; font-size:14px; padding:8px; margin-top:0;">Play</button>
+            <button id="loop-toggle-btn" class="action-btn small-btn" title="Loop: OFF" style="opacity: 0.5; width: 80px; font-size:14px; padding:8px; margin-top:0; margin-left: 5px;">LOOP</button>
+            <label class="mute-container">
+                <input type="checkbox" id="mute-toggle" checked>
+                <span>Mute</span>
+            </label>
+            <span id="time-display" style="font-family:monospace; font-size:16px; min-width:180px; text-align:center">00:00:00 / 00:00:00</span>
+        </div>
+    </div>
+
+    <div id="sidebar">
+        <div id="collapse-sidebar-bar" title="Collapse Sidebar"></div>
+
+        <div class="tab-header">
+            <button class="tab-btn active" onclick="switchTab('layers-tab')">Layers</button>
+            <button class="tab-btn" onclick="switchTab('canvas-tab')">Canvas</button>
+            
+            <button class="tab-btn" onclick="switchTab('shapes-tab')">Tracking</button>
+            
+            <button class="tab-btn" onclick="switchTab('export-tab')">Export</button>
+        </div>
+
+        <div id="layers-tab" class="tab-content active">
+            <div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:15px">
+                <button id="add-text-btn" class="action-btn" style="margin:0; width:calc(50% - 5px)">Add Text</button>
+                <button id="add-shape-btn" class="action-btn" style="margin:0; background-color:#e67e22; width:calc(50% - 5px)">Add Shape</button>
+                <button id="add-image-btn" class="action-btn" style="margin:0; background-color:#e1b12c; width:calc(50% - 5px)">Add Image</button>
+                <button id="add-filter-btn" class="action-btn" style="margin:0; background-color:#8e44ad; width:calc(50% - 5px)">Add Filter</button>
+            </div>
+            <input type="file" id="local-image-input" accept="image/*" style="display:none;">
+            
+            <div id="layers-container"></div>
+            
+            <div id="text-edit-panel" style="display:none; margin-top:10px; padding:10px 15px">
+                <h4 style="margin-bottom:10px; color:#aaa">Edit Text Properties</h4>
+                <input type="text" id="edit-object-name" class="panel-input" />
+                
+                <div id="text-properties-container">
+                <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px">
+                    <div style="display:flex; align-items:stretch; height:35px; background:#1e1e1e; border:1px solid #555; border-radius:2px; width:70px; flex-shrink:0; box-sizing:border-box;">
+                        <input type="number" id="edit-font-size" value="28" style="width:100%; min-width:30px; background:transparent; border:none; color:#fff; text-align:center; font-size:12px; outline:none; padding:0;" title="Font Size" />
+                        <div style="display:flex; flex-direction:column; width:16px; border-left:1px solid #444; flex-shrink:0;">
+                            <button id="font-size-up" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; border-bottom:1px solid #444; padding:0; display:flex; align-items:center; justify-content:center;">▲</button>
+                            <button id="font-size-down" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; padding:0; display:flex; align-items:center; justify-content:center;">▼</button>
+                        </div>
+                    </div>
+                    
+                    <select id="edit-font-style" class="panel-input" style="flex:1; margin-bottom:0; height:35px; box-sizing:border-box;" title="Font Style">
+                        <option value="normal">Normal</option>
+                        <option value="bold">Bold</option>
+                        <option value="italic">Italic</option>
+                        <option value="italic bold">Bold Italic</option>
+                    </select>
+                </div>
+                
+                <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px">
+                    <select id="edit-color-target" class="panel-input" style="flex:1; margin-bottom:0; height:35px; box-sizing:border-box;" title="Color Target">
+                        <option value="textFill">Text Color</option>
+                        <option value="textStroke">Text Outline Color</option>
+                        <option value="bgFill">Object Color</option>
+                        <option value="bgStroke">Object Outline Color</option>
+                    </select>
+                    
+                    <input type="color" id="edit-shared-color" class="panel-input" style="width:35px; height:35px; padding:0; border:none; cursor:pointer; margin-bottom:0" title="Color Selector" />
+                    
+                    <div id="transp-wrap" style="display:flex; align-items:center; gap:5px; height:35px;">
+                        <span style="font-size:10px; color:#aaa;">Transp%</span>
+                        <div style="display:flex; align-items:stretch; height:35px; background:#1e1e1e; border:1px solid #555; border-radius:2px; width:60px; box-sizing:border-box;">
+                            <input type="number" id="edit-text-transparency" value="0" min="0" max="100" style="width:100%; min-width:30px; background:transparent; border:none; color:#fff; text-align:center; font-size:12px; outline:none; padding:0;" />
+                            <div style="display:flex; flex-direction:column; width:16px; border-left:1px solid #444; flex-shrink:0;">
+                                <button id="transp-up" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; border-bottom:1px solid #444; padding:0; display:flex; align-items:center; justify-content:center;">▲</button>
+                                <button id="transp-down" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; padding:0; display:flex; align-items:center; justify-content:center;">▼</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <label id="none-wrap" style="display:none; align-items:center; font-size:12px; color:#aaa; cursor:pointer; height:35px;">
+                        <input type="checkbox" id="edit-color-none" style="margin-right:4px" /> None
+                    </label>
+                    
+                    <div id="edit-stroke-width-wrap" style="display:none; align-items:stretch; height:35px; background:#1e1e1e; border:1px solid #555; border-radius:2px; width:60px; box-sizing:border-box;">
+                        <input type="number" id="edit-stroke-width" value="1" min="1" max="20" title="Outline Width" style="width:100%; min-width:30px; background:transparent; border:none; color:#fff; text-align:center; font-size:12px; outline:none; padding:0;" />
+                        <div style="display:flex; flex-direction:column; width:16px; border-left:1px solid #444; flex-shrink:0;">
+                            <button id="stroke-up" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; border-bottom:1px solid #444; padding:0; display:flex; align-items:center; justify-content:center;">▲</button>
+                            <button id="stroke-down" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; padding:0; display:flex; align-items:center; justify-content:center;">▼</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px">
+                    <select id="edit-font-family" class="panel-input" style="flex:1; margin-bottom:0; height:35px; box-sizing:border-box;" title="Font Family">
+                        <option value="sans-serif">Sans Serif</option>
+                        <option value="serif">Serif</option>
+                        <option value="Arial, sans-serif">Arial</option>
+                        <option value="'Times New Roman', serif">Times New Roman</option>
+                        <option value="Cambria, serif">Cambria</option>
+                        <option value="Calibri, sans-serif">Calibri</option>
+                        <option value="Helvetica, sans-serif">Helvetica</option>
+                        <option value="monospace">Monospace</option>
+                        <option value="Impact, sans-serif">Impact</option>
+                        <option value="'Roboto', sans-serif">Roboto</option>
+                        <option value="'Pacifico', cursive">Pacifico</option>
+                        <option value="'Righteous', cursive">Righteous</option>
+                        <option value="'Caveat', cursive">Caveat</option>
+                    </select>
+                    <select id="edit-text-align" class="panel-input" style="width:80px; margin-bottom:0; height:35px; box-sizing:border-box;" title="Text Align">
+                        <option value="left">Left</option>
+                        <option value="center">Center</option>
+                        <option value="right">Right</option>
+                    </select>
+                </div>
+                </div>
+
+                <div id="object-shadow-panel" style="display:block;">
+                    <div style="display:flex; gap:10px; align-items:center; padding-top:10px; border-top:1px solid #333; margin-bottom:8px;">
+                        <button id="edit-shadow-toggle" style="flex:1; background:#34495e; border:1px solid #555; color:#fff; padding:8px; cursor:pointer; font-size:13px; font-weight:bold; letter-spacing:0.5px; margin:0;">Shadow</button>
+
+                        <div style="flex:1; display:flex; justify-content:center; align-items:center;">
+                            <input type="color" id="edit-shadow-color" class="panel-input" style="width:35px; height:35px; padding:0; border:none; cursor:pointer; margin-bottom:0; opacity:0.5; pointer-events:none;" title="Shadow Color" value="#000000" />
+                        </div>
+
+                        <div style="flex:1; display:flex; justify-content:center; align-items:center; gap:8px;">
+                            <div id="shadow-wheel" style="width:40px; height:40px; border-radius:50%; background:#1e1e1e; border:1px solid #555; position:relative; cursor:crosshair; opacity:0.5; pointer-events:none;">
+                                <div style="position:absolute; top:50%; left:0; right:0; height:1px; background:#444; pointer-events:none;"></div>
+                                <div style="position:absolute; top:0; bottom:0; left:50%; width:1px; background:#444; pointer-events:none;"></div>
+                                <div id="shadow-wheel-handle" style="width:8px; height:8px; background:#00a8ff; border-radius:50%; position:absolute; top:16px; left:16px; pointer-events:none; box-shadow:0 0 3px #000;"></div>
+                            </div>
+                            <div id="shadow-angle-wrap" style="display:flex; align-items:center; gap:2px; opacity:0.5; pointer-events:none;">
+                                <input type="number" id="edit-shadow-angle" class="panel-input" value="0" style="width:36px; height:24px; padding:2px; margin:0; font-size:11px; text-align:center;" title="Angle" />
+                                <span style="font-size:10px; color:#aaa;">°</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="shadow-sliders-wrap" style="display:flex; gap:10px; align-items:center; margin-bottom:10px; opacity:0.5; pointer-events:none;">
+                        <div id="softness-wrap" style="display:flex; align-items:center; gap:5px; flex:1;">
+                            <span style="font-size:10px; color:#aaa; white-space:nowrap;">Softness</span>
+                            <div style="display:flex; align-items:stretch; height:35px; background:#1e1e1e; border:1px solid #555; border-radius:2px; width:100%;">
+                                <input type="number" id="edit-shadow-blur" value="-50" min="-50" max="50" style="width:100%; min-width:30px; background:transparent; border:none; color:#fff; text-align:center; font-size:12px; outline:none; padding:0;" />
+                                <div style="display:flex; flex-direction:column; width:16px; border-left:1px solid #444; flex-shrink:0;">
+                                    <button id="shadow-blur-up" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; border-bottom:1px solid #444; padding:0; display:flex; align-items:center; justify-content:center;">▲</button>
+                                    <button id="shadow-blur-down" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; padding:0; display:flex; align-items:center; justify-content:center;">▼</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="thickness-wrap" style="display:flex; align-items:center; gap:5px; flex:1;">
+                            <span style="font-size:10px; color:#aaa; white-space:nowrap;">Thickness</span>
+                            <div style="display:flex; align-items:stretch; height:35px; background:#1e1e1e; border:1px solid #555; border-radius:2px; width:100%;">
+                                <input type="number" id="edit-shadow-thickness" value="100" min="0" max="100" style="width:100%; min-width:30px; background:transparent; border:none; color:#fff; text-align:center; font-size:12px; outline:none; padding:0;" />
+                                <div style="display:flex; flex-direction:column; width:16px; border-left:1px solid #444; flex-shrink:0;">
+                                    <button id="shadow-thickness-up" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; border-bottom:1px solid #444; padding:0; display:flex; align-items:center; justify-content:center;">▲</button>
+                                    <button id="shadow-thickness-down" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; padding:0; display:flex; align-items:center; justify-content:center;">▼</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                                <div id="object-transform-panel" style="display:block; margin-bottom:12px;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; padding-top:10px; border-top:1px solid #333; margin-bottom:8px;">
+                        <button id="transform-controls-toggle" style="flex:1; background:#34495e; border:1px solid #555; color:#fff; padding:8px; cursor:pointer; font-size:13px; font-weight:bold; letter-spacing:0.5px; margin:0; margin-right:10px;">Transform</button>
+                        <div id="text-ratio-lock" class="layer-icon small" title="Lock Aspect Ratio" style="margin-right:15px; display:flex; align-items:center; justify-content:center;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                        </div>
+                        <div id="transform-dimensions" style="display:flex; gap:10px; align-items:center; width:calc(50% - 7.5px); justify-content:space-between;">
+                            <div style="display:flex; align-items:center; gap:4px; flex:1;">
+                                <span style="font-size:10px; color:#aaa;">W</span>
+                                <input type="number" id="edit-text-width" class="panel-input" style="width:100%; height:24px; padding:2px 4px; margin:0; font-size:11px; text-align:center;">
+                            </div>
+                            <div style="display:flex; align-items:center; gap:4px; flex:1;">
+                                <span style="font-size:10px; color:#aaa;">H</span>
+                                <input type="number" id="edit-text-height" class="panel-input" style="width:100%; height:24px; padding:2px 4px; margin:0; font-size:11px; text-align:center;">
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:5px;">
+                        <button id="text-flip-h" class="action-btn small-btn" style="flex:1; margin:0; background-color:#34495e;">Flip H</button>
+                        <button id="text-flip-v" class="action-btn small-btn" style="flex:1; margin:0; background-color:#34495e;">Flip V</button>
+                        <button id="text-rot-90" class="action-btn small-btn" style="flex:1; margin:0; background-color:#34495e;">Rot 90°</button>
+                        <button id="text-center" class="action-btn small-btn" style="flex:1; margin:0; background-color:#34495e;">Center</button>
+                    </div>
+                    
+                    <div id="advanced-transform-expander" style="background-color: #2c3e50; color: #aaa; text-align: center; padding: 4px 0; font-size: 11px; cursor: pointer; margin-top: 5px; border-radius: 2px; transition: color 0.2s;">▼ Advanced Options</div>
+                    <div id="advanced-transform-options" style="display: none; flex-direction: column; margin-top: 5px;">
+                        <div style="display: flex; flex-direction: row; gap: 5px;">
+                            <button id="transform-blocking-toggle" class="action-btn" style="flex: 1; margin: 0; background-color: #34495e; font-size: 11px; padding: 4px;">Blocking</button>
+                            <button id="transform-styling-toggle" class="action-btn" style="flex: 1; margin: 0; background-color: #34495e; font-size: 11px; padding: 4px;">Styling</button>
+                        </div>
+                        <div id="advanced-config-display" style="display:none; margin-top:8px; font-size:10px; color:#aaa; font-family:monospace; line-height:1.4; background:#111; padding:8px; border-radius:4px; border:1px solid #222; overflow-x:auto; white-space:pre-wrap; user-select:text; -webkit-user-select:text;"></div>
+                        
+                        <div id="transform-groups-init-state" style="display:flex; gap:10px; margin-top:8px; align-items:center;">
+                            <select id="transform-mode-select" class="panel-input" style="flex:1; margin-bottom:0;">
+                                <option value="create">Create Transform Group</option>
+                                <option value="add">Add To Transform Group</option>
+                            </select>
+                            <button id="start-transform-btn" class="action-btn small-btn" style="background-color:#f39c12; width:24px; height:24px; margin:0; display:flex; align-items:center; justify-content:center; padding:0; box-sizing:border-box;">&gt;</button>
+                        </div>
+
+                        <div id="transforms-timeline-panel" style="display:none; margin-top:10px; padding:10px 15px; background-color:#2a2a2a; border:1px solid #444; border-radius:4px;">
+                            <h4 style="margin-bottom:10px; color:#aaa; font-size:12px; text-transform:uppercase;">Transforms Timeline</h4>
+                            
+                            <div id="active-transform-group-header" style="display:none; justify-content:space-between; align-items:center; margin-bottom:10px; background-color:#1e1e1e; padding:5px 10px; border-radius:4px;">
+                                <span id="transform-group-name-display" style="color:#00bcd4; font-size:12px; font-weight:bold; letter-spacing:1px;"></span>
+                                <button id="cancel-transform-group-btn" class="action-btn small-btn" style="background:transparent; color:#e74c3c; width:auto; margin:0; padding:0; height:auto; display:flex; align-items:center; justify-content:center;" title="Cancel Group">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                </button>
+                            </div>
+                            
+                            <div id="transforms-list-container" style="display:none; flex-direction:column; gap:5px;">
+                                <div id="transforms-rows" style="display:flex; flex-direction:column; gap:5px; margin-bottom:5px;"></div>
+                                <div style="display:flex; gap:12px; align-items:center;">
+                                    <input type="text" id="new-transform-input" class="panel-input" style="margin-bottom:0; flex:1; height:32px; box-sizing:border-box;" placeholder="Type new object name..." />
+                                    <button id="add-transform-row-btn" class="action-btn small-btn" style="background-color:#f39c12; width:24px; height:24px; margin:0; display:flex; align-items:center; justify-content:center; padding:0; box-sizing:border-box;" title="Add Transform">+</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="confirm-text-btn" class="action-btn" style="background-color:#4cd137; margin-top:0; padding:8px; display:block; width:100%;">✔</button>
+                <div id="captions-timeline-panel" style="display:none; margin-top:10px; padding:10px 15px; background-color:#2a2a2a; border:1px solid #444; border-radius:4px;">
+                    <h4 style="margin-bottom:10px; color:#aaa; font-size:12px; text-transform:uppercase;">Captions Timeline</h4>
+                    
+                    <div id="active-caption-group-header" style="display:none; justify-content:space-between; align-items:center; margin-bottom:10px; background-color:#1e1e1e; padding:5px 10px; border-radius:4px;">
+                        <span id="caption-group-name-display" style="color:#00bcd4; font-size:12px; font-weight:bold; letter-spacing:1px;"></span>
+                        <button id="cancel-caption-group-btn" class="action-btn small-btn" style="background:transparent; color:#e74c3c; width:auto; margin:0; padding:0; height:auto; display:flex; align-items:center; justify-content:center;" title="Cancel Group">
+                            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </button>
+                    </div>
+
+                    <div id="captions-init-state" style="display:flex; gap:10px; margin-bottom:10px; align-items:center;">
+                        <select id="captions-mode-select" class="panel-input" style="flex:1; margin-bottom:0;">
+                            <option value="create">Create Captions Group</option>
+                            <option value="add">Add To Captions Group</option>
+                        </select>
+                        <button id="start-captions-btn" class="action-btn small-btn" style="background-color:#f39c12; width:24px; height:24px; margin:0; display:flex; align-items:center; justify-content:center; padding:0; box-sizing:border-box;">&gt;</button>
+                    </div>
+
+                    <div id="active-captions-group-header" style="display:none; justify-content:space-between; align-items:center; margin-bottom:10px; background-color:#1e1e1e; padding:5px 10px; border-radius:4px;">
+                        <span id="captions-group-name-display" style="color:#00bcd4; font-size:12px; font-weight:bold; letter-spacing:1px;"></span>
+                        <button id="cancel-captions-group-btn" class="action-btn small-btn" style="background:transparent; color:#e74c3c; width:auto; margin:0; padding:0; height:auto; display:flex; align-items:center; justify-content:center;" title="Cancel Group">
+                            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </button>
+                    </div>
+
+                    <div id="captions-target-select-wrap" style="display:none; margin-bottom:10px;">
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <button id="back-captions-mode-btn" class="action-btn small-btn" style="background-color:#f39c12; width:24px; height:24px; margin:0; display:flex; align-items:center; justify-content:center; padding:0; box-sizing:border-box;">&lt;</button>
+                            <select id="existing-groups-select" class="panel-input" style="flex:1; margin-bottom:0;">
+                                <option value="" disabled selected>Select existing group...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="captions-list-container" style="display:none; flex-direction:column; gap:5px;">
+                        <div id="captions-rows" style="display:flex; flex-direction:column; gap:5px; margin-bottom:5px;"></div>
+                        <div style="display:flex; gap:12px; align-items:center;">
+                            <input type="text" id="new-caption-input" class="panel-input" style="margin-bottom:0; flex:1; height:32px; box-sizing:border-box;" placeholder="Type next caption..." />
+                            <button id="add-caption-row-btn" class="action-btn small-btn" style="background-color:#f39c12; width:24px; height:24px; margin:0; display:flex; align-items:center; justify-content:center; padding:0; box-sizing:border-box;" title="Add Caption">+</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="image-edit-panel" style="display:none; margin-top:10px; padding:10px 15px">
+                <h4 id="image-panel-title" style="margin-bottom:10px; color:#aaa">Image Properties</h4>
+                <input type="text" id="edit-object-name" class="panel-input" placeholder="Name" />
+                
+                <div id="shared-properties-anchor"></div>
+                
+                <div id="shape-properties-container" style="display:none; gap:10px; align-items:center; margin-bottom:15px">
+                    <span style="font-size:12px; color:#aaa; width:40px;">Shape</span>
+                    <select id="edit-shape-type" class="panel-input" style="flex:1; margin-bottom:0">
+                        <option value="Rectangle">Rectangle</option>
+                        <option value="Square">Square</option>
+                        <option value="Circle">Circle</option>
+                        <option value="Oval">Oval</option>
+                        <option value="Triangle">Triangle</option>
+                        <option value="Trapezoid">Trapezoid</option>
+                        <option value="Rhombus">Rhombus</option>
+                        <option value="Pentagon">Pentagon</option>
+                        <option value="Hexagon">Hexagon</option>
+                        <option value="Octagon">Octagon</option>
+                    </select>
+                    <input type="color" id="edit-shape-fill" class="panel-input" style="width:35px; height:35px; padding:0; border:none; cursor:pointer; margin-bottom:0; flex-shrink:0;" title="Shape Fill Color" />
+                </div>
+
+                <div id="object-border-panel" style="display:none; flex-direction:column; gap:10px; margin-bottom:15px;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding-top:10px; border-top:1px solid #333;">
+                        <button id="shape-border-toggle" style="flex:1; background:#34495e; border:1px solid #555; color:#fff; padding:8px; cursor:pointer; font-size:13px; font-weight:bold; letter-spacing:0.5px; margin:0; transition:background-color 0.2s;">Border</button>
+                        <input type="color" id="edit-shape-stroke" class="panel-input" style="width:35px; height:35px; padding:0; border:none; cursor:pointer; margin-bottom:0; flex-shrink:0;" title="Border Color" />
+                        <select id="edit-shape-stroke-style" class="panel-input" style="width:85px; margin-bottom:0; height:35px; box-sizing:border-box;" title="Border Style">
+                            <option value="solid">Solid</option>
+                            <option value="dashed">Dashed</option>
+                            <option value="dotted">Dotted</option>
+                        </select>
+                    </div>
+                    
+                    <div id="shape-border-props" style="display:flex; gap:10px; align-items:center; opacity:0.5; pointer-events:none;">
+                        <div style="display:flex; align-items:center; gap:5px; flex:1;">
+                            <span style="font-size:10px; color:#aaa; white-space:nowrap;">Thickness</span>
+                            <div style="display:flex; align-items:stretch; height:35px; background:#1e1e1e; border:1px solid #555; border-radius:2px; width:100%;">
+                                <style>
+                                    #edit-shape-stroke-width::-webkit-inner-spin-button, #edit-shape-stroke-width::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+                                    #edit-shape-stroke-width { -moz-appearance: textfield; }
+                                </style>
+                                <input type="number" id="edit-shape-stroke-width" value="2" min="1" max="50" style="width:100%; min-width:30px; background:transparent; border:none; color:#fff; text-align:center; font-size:12px; outline:none; padding:0;" title="Border Thickness" />
+                                <div style="display:flex; flex-direction:column; width:16px; border-left:1px solid #444; flex-shrink:0;">
+                                    <button id="shape-stroke-up" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; border-bottom:1px solid #444; padding:0; display:flex; align-items:center; justify-content:center;">▲</button>
+                                    <button id="shape-stroke-down" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; padding:0; display:flex; align-items:center; justify-content:center;">▼</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="border-sides-wrap" style="display:flex; flex:1; height:35px; gap:2px; transition:opacity 0.2s;">
+                            <button id="border-side-top" style="flex:1; background:#00a8ff; border:none; color:#fff; cursor:pointer; font-weight:bold; font-size:12px; border-radius:2px;" title="Top">↑</button>
+                            <button id="border-side-right" style="flex:1; background:#00a8ff; border:none; color:#fff; cursor:pointer; font-weight:bold; font-size:12px; border-radius:2px;" title="Right">→</button>
+                            <button id="border-side-bottom" style="flex:1; background:#00a8ff; border:none; color:#fff; cursor:pointer; font-weight:bold; font-size:12px; border-radius:2px;" title="Bottom">↓</button>
+                            <button id="border-side-left" style="flex:1; background:#00a8ff; border:none; color:#fff; cursor:pointer; font-weight:bold; font-size:12px; border-radius:2px;" title="Left">←</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="shared-properties-injection-point"></div>
+
+                <button id="confirm-image-btn" class="action-btn" style="background-color:#4cd137; margin-top:0; padding:8px; display:block; width:100%;">✔</button>
+            </div>
+
+            <div id="filter-edit-panel" style="display:none; margin-top:10px; padding:10px 15px">
+                <h4 style="margin-bottom:10px; color:#aaa">Filter Properties</h4>
+                <div id="filter-properties-container" style="display:flex; gap:10px; align-items:center">
+                    <span style="font-size:12px; color:#aaa; width:30px;">Type</span>
+                    <select id="edit-filter-type" class="panel-input" style="flex:1; margin-bottom:0">
+                        <option value="none">None</option>
+                        <option value="grayscale">Black & White</option>
+                        <option value="sepia">Sepia</option>
+                        <option value="invert">Invert</option>
+                        <option value="depth-of-field">Depth of Field</option>
+                    </select>
+                </div>
+                
+                <div id="dof-properties-block" style="display:none; margin-top:15px; padding-top:15px; border-top:1px solid #333;">
+                    <style>
+                        #dof-blur-input::-webkit-inner-spin-button, #dof-blur-input::-webkit-outer-spin-button,
+                        #dof-core-input::-webkit-inner-spin-button, #dof-core-input::-webkit-outer-spin-button,
+                        #dof-feather-input::-webkit-inner-spin-button, #dof-feather-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+                        #dof-blur-input, #dof-core-input, #dof-feather-input { -moz-appearance: textfield; }
+                    </style>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <div style="flex:1;">
+                            <span style="font-size:10px; color:#777;">Blur</span>
+                            <div style="display:flex; align-items:stretch; height:28px; background:#1e1e1e; border:1px solid #555; border-radius:2px; margin-top:4px;">
+                                <input type="number" id="dof-blur-input" value="8.0" min="0" max="50" step="0.5" style="width:100%; min-width:30px; background:transparent; border:none; color:#fff; text-align:center; font-size:12px; outline:none; padding:0;">
+                                <div style="display:flex; flex-direction:column; width:16px; border-left:1px solid #444; flex-shrink:0;">
+                                    <button id="dof-blur-up" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; border-bottom:1px solid #444; padding:0; display:flex; align-items:center; justify-content:center;">▲</button>
+                                    <button id="dof-blur-down" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; padding:0; display:flex; align-items:center; justify-content:center;">▼</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="flex:1;">
+                            <span style="font-size:10px; color:#777;">Focal Size</span>
+                            <div style="display:flex; align-items:stretch; height:28px; background:#1e1e1e; border:1px solid #555; border-radius:2px; margin-top:4px;">
+                                <input type="number" id="dof-core-input" value="2.5" min="0" max="100" step="0.5" style="width:100%; min-width:30px; background:transparent; border:none; color:#fff; text-align:center; font-size:12px; outline:none; padding:0;">
+                                <div style="display:flex; flex-direction:column; width:16px; border-left:1px solid #444; flex-shrink:0;">
+                                    <button id="dof-core-up" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; border-bottom:1px solid #444; padding:0; display:flex; align-items:center; justify-content:center;">▲</button>
+                                    <button id="dof-core-down" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; padding:0; display:flex; align-items:center; justify-content:center;">▼</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="flex:1;">
+                            <span style="font-size:10px; color:#777;">Feather</span>
+                            <div style="display:flex; align-items:stretch; height:28px; background:#1e1e1e; border:1px solid #555; border-radius:2px; margin-top:4px;">
+                                <input type="number" id="dof-feather-input" value="23.0" min="0" max="100" step="0.5" style="width:100%; min-width:30px; background:transparent; border:none; color:#fff; text-align:center; font-size:12px; outline:none; padding:0;">
+                                <div style="display:flex; flex-direction:column; width:16px; border-left:1px solid #444; flex-shrink:0;">
+                                    <button id="dof-feather-up" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; border-bottom:1px solid #444; padding:0; display:flex; align-items:center; justify-content:center;">▲</button>
+                                    <button id="dof-feather-down" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; padding:0; display:flex; align-items:center; justify-content:center;">▼</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <button id="confirm-filter-btn" class="action-btn" style="background-color:#4cd137; margin-top:12px; padding:8px; display:block; width:100%;">✔</button>
+            </div>
+
+            <div id="follow-edit-panel" style="display:none; margin-top:10px; padding:10px 15px; background-color:#222; border:1px solid #444; border-radius:4px">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+                    <h4 style="color:#aaa; font-size:12px; text-transform:uppercase; margin-bottom:0">Position Tracking</h4>
+                </div>
+                <div style="margin-bottom:8px;">
+                    <span style="font-size:12px; font-weight:bold; color:#aaa;">Tracking Mode</span>
+                    <select id="follow-mode-select" class="panel-input" style="margin-top:6px; margin-bottom:6px;">
+                        <option value="static">Static Position</option>
+                        <option value="tracked" id="follow-tracked-option" disabled>Follow Tracked Target</option>
+                    </select>
+                    <div style="display:flex; align-items:center;">
+                        <input type="checkbox" id="show-track-box-toggle" style="margin-right:6px; cursor:pointer;" checked>
+                        <label for="show-track-box-toggle" style="cursor:pointer; color:#aaa; font-size:11px;">Show Tracked Target Boundaries</label>
+                    </div>
+                </div>
+
+                <div id="follow-tracked-wrapper" style="display:none; margin-bottom:12px;">
+                    <span style="font-size:10px; color:#777;">Target Object</span>
+                    <select id="follow-target-select" class="panel-input" style="margin-top:4px;"></select>
+                    
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; margin-top:6px; padding-top:8px; border-top:1px solid #333;">
+                        <span style="font-size:10px; color:#777;">Motion Smoothing</span>
+                        <div style="display:flex; align-items:stretch; height:35px; background:#1e1e1e; border:1px solid #555; border-radius:2px; width:60px; box-sizing:border-box;">
+                            <style>
+                                #follow-smooth-input::-webkit-inner-spin-button, #follow-smooth-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+                                #follow-smooth-input { -moz-appearance: textfield; }
+                            </style>
+                            <input type="number" id="follow-smooth-input" value="5" min="1" max="31" step="2" style="width:100%; min-width:30px; background:transparent; border:none; color:#fff; text-align:center; font-size:12px; outline:none; padding:0;">
+                            <div style="display:flex; flex-direction:column; width:16px; border-left:1px solid #444; flex-shrink:0;">
+                                <button id="smooth-up" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; border-bottom:1px solid #444; padding:0; display:flex; align-items:center; justify-content:center;">▲</button>
+                                <button id="smooth-down" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; padding:0; display:flex; align-items:center; justify-content:center;">▼</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; padding-top:8px; border-top:1px solid #333;">
+                        <span style="font-size:10px; color:#777;">Sample Accuracy</span>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <input type="range" id="follow-radius-slider" min="1" max="100" value="20" style="width:70px;">
+                            <div style="display:flex; align-items:stretch; height:35px; background:#1e1e1e; border:1px solid #555; border-radius:2px; width:60px; box-sizing:border-box;">
+                                <style>
+                                    #follow-radius-input::-webkit-inner-spin-button, #follow-radius-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+                                    #follow-radius-input { -moz-appearance: textfield; }
+                                </style>
+                                <input type="number" id="follow-radius-input" value="20" min="1" max="100" style="width:100%; min-width:30px; background:transparent; border:none; color:#fff; text-align:center; font-size:12px; outline:none; padding:0;">
+                                <div style="display:flex; flex-direction:column; width:16px; border-left:1px solid #444; flex-shrink:0;">
+                                    <button id="radius-up" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; border-bottom:1px solid #444; padding:0; display:flex; align-items:center; justify-content:center;">▲</button>
+                                    <button id="radius-down" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; padding:0; display:flex; align-items:center; justify-content:center;">▼</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; align-items:center; margin-bottom:10px;">
+                        <input type="checkbox" id="show-sample-area-toggle" style="margin-right:6px; cursor:pointer;">
+                        <label for="show-sample-area-toggle" style="cursor:pointer; color:#aaa; font-size:11px;">Show Sample Area Circle</label>
+                    </div>
+
+                    <div style="display:flex; gap:8px; margin-bottom:6px;">
+                        <button id="follow-edit-anchor-btn" class="action-btn small-btn" style="flex:1; margin-top:0; background-color:#f39c12; display:none;">Edit Anchor Position</button>
+                        <button id="cancel-anchor-btn" class="action-btn remove-btn small-btn" style="flex:0 0 30px; margin-top:0; display:none; justify-content:center; align-items:center; padding:0;" title="Cancel Edit">✖</button>
+                    </div>
+                    <button id="follow-track-anchor-btn" class="action-btn small-btn" style="width:100%; margin-bottom:6px; background-color:#9b59b6; display:none;">Track Anchor Feature</button>
+                    <div id="follow-drag-note" style="display:none; font-size:10px; color:#f39c12; font-style:italic; margin-top:4px;">*Tracking update required to apply changes</div>
+                </div>
+
+                <div id="follow-static-wrapper" style="display:block; margin-bottom:12px;">
+                    <div style="display:flex; gap:8px; margin-bottom:6px;">
+                        <button id="follow-set-static-btn" class="action-btn small-btn" style="flex:1; margin-top:0; background-color:#f39c12;">Edit Static Position</button>
+                        <button id="cancel-static-btn" class="action-btn remove-btn small-btn" style="flex:0 0 30px; margin-top:0; display:none; justify-content:center; align-items:center; padding:0;" title="Cancel Edit">✖</button>
+                    </div>
+                </div>
+
+                <div id="focal-coordinates" style="display:flex; flex-direction:column; margin-bottom:12px; padding-top:12px; border-top:1px solid #333;">
+                    <div id="position-coordinates" style="font-size:10px; color:#aaa; font-family:monospace; line-height:1.6; background:#111; padding:8px; border-radius:4px; border:1px solid #222;">
+                        <div style="margin-bottom:6px;"><span>Static Anchor:</span><br><span style="color:#2ecc71;">(x: <span id="static-anchor-x">0</span>, y: <span id="static-anchor-y">0</span>)</span></div>
+                        <div style="margin-bottom:6px;"><span>Tracked Target Anchor:</span><br><span style="color:#e74c3c;">(x: <span id="follow-anchor-x">0</span>, y: <span id="follow-anchor-y">0</span>)</span></div>
+                        <div><span>Tracked Target Center:</span><br><span style="color:#f1c40f;">(x: <span id="follow-val-x">0</span>, y: <span id="follow-val-y">0</span>)</span></div>
+                    </div>
+                    
+                    <div style="display:flex; align-items:center; margin-top:8px;">
+                        <input type="checkbox" id="show-canvas-grid-toggle" style="margin-right:6px; cursor:pointer;">
+                        <label for="show-canvas-grid-toggle" style="cursor:pointer; color:#aaa; font-size:11px;">Show canvas grid</label>
+                    </div>
+
+                    <div id="grid-density-wrap" style="display:none; align-items:center; justify-content:space-between; margin-top:8px; padding-top:8px; border-top:1px solid #333;">
+                        <span style="font-size:10px; color:#777;">Grid Density</span>
+                        <div style="display:flex; align-items:stretch; height:28px; background:#1e1e1e; border:1px solid #555; border-radius:2px; width:60px; box-sizing:border-box;">
+                            <style>
+                                #canvas-grid-density::-webkit-inner-spin-button, #canvas-grid-density::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+                                #canvas-grid-density { -moz-appearance: textfield; }
+                            </style>
+                            <input type="number" id="canvas-grid-density" value="20" min="10" max="200" step="10" style="width:100%; min-width:30px; background:transparent; border:none; color:#fff; text-align:center; font-size:12px; outline:none; padding:0;">
+                            <div style="display:flex; flex-direction:column; width:16px; border-left:1px solid #444; flex-shrink:0;">
+                                <button id="grid-density-up" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; border-bottom:1px solid #444; padding:0; display:flex; align-items:center; justify-content:center;">▲</button>
+                                <button id="grid-density-down" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; padding:0; display:flex; align-items:center; justify-content:center;">▼</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="time-edit-panel" style="display:none; margin-top:10px; margin-bottom:15px; padding:10px 15px; background-color:#222; border:1px solid #444; border-radius:4px">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+                    <h4 style="color:#aaa; font-size:12px; text-transform:uppercase; margin-bottom:0">Interval Timing</h4>
+                    <div id="edit-time-lock" class="layer-icon small" title="Lock Interval">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                    </div>
+                </div>
+                <div style="display:flex; flex-wrap:wrap; gap:15px; align-items:flex-end">
+                    <div style="display:flex; flex-direction:column; gap:3px">
+                        <span style="font-size:10px; color:#aaa">START (HH:MM:SS:MS)</span>
+                        <div id="edit-start-time-group" class="time-spinner-group" data-target="start">
+                            <span class="time-segment" data-type="h">00</span>:<span class="time-segment" data-type="m">00</span>:<span class="time-segment" data-type="s">00</span>:<span class="time-segment" data-type="ms">000</span>
+                        </div>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:3px">
+                        <span style="font-size:10px; color:#aaa">END (HH:MM:SS:MS)</span>
+                        <div id="edit-end-time-group" class="time-spinner-group" data-target="end">
+                            <span class="time-segment" data-type="h">00</span>:<span class="time-segment" data-type="m">00</span>:<span class="time-segment" data-type="s">00</span>:<span class="time-segment" data-type="ms">000</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="canvas-tab" class="tab-content">
+            <h3>Cropping</h3>
+            <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; margin-bottom:15px">
+                <button class="action-btn small-btn ratio-btn" data-ratio="16/9" style="width:calc(50% - 5px); margin-top:0">16:9</button>
+                <button class="action-btn small-btn ratio-btn" data-ratio="9/16" style="width:calc(50% - 5px); margin-top:0">9:16</button>
+                <button class="action-btn small-btn ratio-btn" data-ratio="1/1" style="width:calc(50% - 5px); margin-top:0">1:1</button>
+                <button class="action-btn small-btn ratio-btn" data-ratio="4/5" style="width:calc(50% - 5px); margin-top:0">4:5</button>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:10px">
+                <button id="edit-crop-btn" class="action-btn" style="background-color:#f39c12; width:50px; margin-top:0; padding:8px; display:none;">Edit</button>
+                <button id="confirm-crop-btn" class="action-btn" style="background-color:#2ecc71; width:40px; margin-top:0; padding:8px; display:none;">✔</button>
+            </div>
+
+            <h3 style="margin-top:25px; padding-top:20px; border-top:1px solid #333">Letterboxing</h3>
+            
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:15px">
+                <span style="font-size:14px; color:#aaa">Color</span>
+                <input type="color" id="letterbox-color" value="#000000" style="width:50px; height:30px; cursor:pointer; background:none; border:1px solid #555">
+            </div>
+            
+            <div style="display:flex; gap:10px; margin-bottom:15px">
+                <button id="add-horizontal-bars" class="action-btn small-btn" style="margin-top:0; background-color:#34495e; flex:1">Horizontal</button>
+                <button id="add-vertical-bars" class="action-btn small-btn" style="margin-top:0; background-color:#34495e; flex:1">Vertical</button>
+                
+                <button id="edit-letterbox-btn" class="action-btn small-btn" style="margin-top:0; width:50px; display:none; padding:4px; background-color:#f39c12">Edit</button>
+                <button id="clear-letterbox-btn" class="action-btn small-btn remove-btn" style="margin-top:0; width:30px; display:none; padding:4px;" title="Remove Letterbox">✖</button>
+                <button id="apply-letterbox-btn" class="action-btn small-btn" style="background-color:#4cd137; width:30px; margin-top:0; padding:4px; display:none;" title="Apply Letterbox">✔</button>
+            </div>
+
+            <div id="letterbox-controls" style="display:none; flex-direction:column; gap:10px;">
+                <div style="display:flex; justify-content:space-between; font-size:12px; color:#aaa;">
+                    <span>Thickness</span>
+                    <span id="letterbox-thickness-val">10%</span>
+                </div>
+                <input type="range" id="letterbox-thickness" min="1" max="50" value="10" style="width:100%;">
+            </div>
+        </div>
+
+        <div id="shapes-tab" class="tab-content">
+            <button id="add-box-btn" style="display:none;"></button>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h3 style="margin-bottom:0;">Backend Connection</h3>
+                <button id="dev-toggle-btn" style="background:none; border:none; color:#f39c12; font-size:10px; cursor:pointer; font-weight:bold; padding:0;">[ DEV CTRLS ]</button>
+            </div>
+
+            <div id="dev-connection-panel" style="display:none; border:1px dashed #f39c12; padding:10px; margin-bottom:10px; background:#2a2a2a; border-radius:4px;">
+                <span style="font-size:10px; color:#f39c12; text-transform:uppercase; font-weight:bold;">Colab GPU Mode</span>
+                <input type="text" id="ngrok-url-input" value="https://marni-unjocund-gracelyn.ngrok-free.dev" placeholder="Ngrok URL" style="width:100%; margin-top:5px; margin-bottom:5px; padding:5px; background:#111; color:#fff; border:1px solid #444;">
+                <input type="password" id="backend-auth-token" value="testit" placeholder="Auth Token" style="width:100%; margin-bottom:0; padding:5px; background:#111; color:#fff; border:1px solid #444;">
+            </div>
+
+            <button id="backend-connect-btn" class="action-btn">Connect to Processing Container</button>
+            <div id="backend-status" style="font-size:12px; color:#aaa; margin-top:5px;">Status: Ready to Connect</div>
+
+            <div id="auth-error-message" style="color:#ff4757; font-size:12px; font-weight:bold; margin-top:5px; display:none;"></div>
+
+            <h3 id="target-tracking-header" style="margin-top:35px; margin-bottom:15px;">Target Tracking</h3>
+            <div id="draw-target-wrapper" style="display:flex; gap:10px; margin-bottom:0;">
+                <button id="add-track-target-btn" class="action-btn" style="opacity:0.3; pointer-events:none; margin-top:0; flex:1;">Draw Target Box</button>
+                <button id="cancel-draw-btn" class="action-btn remove-btn" style="margin-top:0; width:40px; padding:8px; display:none; justify-content:center; align-items:center;" title="Cancel Drawing">✖</button>
+            </div>
+
+            <div id="track-edit-panel" style="display:none; margin-top:15px; padding:15px; background-color:#1e1e1e; border:1px solid #444; border-radius:4px;">
+                <h4 style="margin-bottom:15px; color:#aaa; font-size:12px; text-transform:uppercase; border-bottom:1px solid #333; padding-bottom:5px;">Target Properties</h4>
+                
+                <div style="display:flex; gap:10px; align-items:center; margin-bottom:15px;">
+                    <input type="text" id="track-target-name" class="panel-input" placeholder="Target Name" style="margin-bottom:0; flex:1;" />
+                    <button id="confirm-name-btn" class="action-btn" style="background-color:#4cd137; width:40px; margin-top:0; padding:8px" title="Confirm Name">✔</button>
+                </div>
+
+                <div style="display:flex; align-items:center; justify-content:space-between; padding-bottom:15px; border-bottom:1px solid #333; margin-bottom:15px;">
+                    <span style="font-size:12px; color:#aaa; font-weight:bold;">Box Size</span>
+                    <div style="display:flex; gap:10px; align-items:center; width:calc(50% - 7.5px); justify-content:space-between;">
+                        <div style="display:flex; align-items:center; gap:4px; flex:1;">
+                            <span style="font-size:10px; color:#aaa;">W</span>
+                            <style>
+                                #edit-track-width::-webkit-inner-spin-button, #edit-track-width::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+                                #edit-track-width { -moz-appearance: textfield; }
+                                #edit-track-height::-webkit-inner-spin-button, #edit-track-height::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+                                #edit-track-height { -moz-appearance: textfield; }
+                            </style>
+                            <input type="number" id="edit-track-width" class="panel-input" style="width:100%; height:24px; padding:2px 4px; margin:0; font-size:11px; text-align:center;">
+                        </div>
+                        <div style="display:flex; align-items:center; gap:4px; flex:1;">
+                            <span style="font-size:10px; color:#aaa;">H</span>
+                            <input type="number" id="edit-track-height" class="panel-input" style="width:100%; height:24px; padding:2px 4px; margin:0; font-size:11px; text-align:center;">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:15px; align-items:center; margin-bottom:15px;">
+                    <div id="track-preview-container" style="position:relative; width:80px; height:80px; overflow:hidden; border:1px solid #555; background:#000; cursor:grab; flex-shrink:0; border-radius:4px;">
+                        <img id="track-target-preview" src="" style="position:absolute; top:0; left:0; pointer-events:none;">
+                    </div>
+                    
+                    <div style="display:flex; flex-direction:column; gap:6px; flex:1;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:12px; font-weight:bold; color:#ff4757; width:12px;">X</span>
+                            <input type="text" id="track-prop-x" class="panel-input" readonly style="margin-bottom:0; padding:4px; font-size:12px; text-align:center; flex:1;">
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:12px; font-weight:bold; color:#2ed573; width:12px;">Y</span>
+                            <input type="text" id="track-prop-y" class="panel-input" readonly style="margin-bottom:0; padding:4px; font-size:12px; text-align:center; flex:1;">
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:12px; font-weight:bold; color:#aaa; width:12px;">W</span>
+                            <input type="text" id="track-prop-w" class="panel-input" readonly style="margin-bottom:0; padding:4px; font-size:12px; text-align:center; flex:1;">
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:12px; font-weight:bold; color:#aaa; width:12px;">H</span>
+                            <input type="text" id="track-prop-h" class="panel-input" readonly style="margin-bottom:0; padding:4px; font-size:12px; text-align:center; flex:1;">
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:12px; font-weight:bold; color:#00a8ff; width:12px;">CX</span>
+                            <input type="text" id="track-prop-cx" class="panel-input" readonly style="margin-bottom:0; padding:4px; font-size:12px; text-align:center; flex:1;">
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:12px; font-weight:bold; color:#00a8ff; width:12px;">CY</span>
+                            <input type="text" id="track-prop-cy" class="panel-input" readonly style="margin-bottom:0; padding:4px; font-size:12px; text-align:center; flex:1;">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="track-identifiers" style="display:none; flex-direction:column; gap:6px; margin-bottom:15px; padding:10px; background:#111; border:1px solid #333; border-radius:4px;">
+                    <span style="font-size:10px; color:#00a8ff; text-transform:uppercase; font-weight:bold;">Object Identifiers</span>
+                    <div style="display:flex; justify-content:space-between; font-size:12px;"><span>Name:</span> <span id="ident-name" style="color:#fff; font-family:monospace;">-</span></div>
+                    <div style="display:flex; justify-content:space-between; font-size:12px;"><span>ID:</span> <span id="ident-id" style="color:#fff; font-family:monospace;">-</span></div>
+                    <div style="display:flex; justify-content:space-between; font-size:12px;"><span>Status:</span> <span id="ident-status" style="color:#2ed573; font-family:monospace;">-</span></div>
+                    <div style="display:flex; justify-content:space-between; font-size:12px;"><span>Center:</span> <span id="ident-center" style="color:#fff; font-family:monospace;">-</span></div>
+                    <div style="display:flex; justify-content:space-between; font-size:12px;"><span>Size:</span> <span id="ident-size" style="color:#fff; font-family:monospace;">-</span></div>
+                    <div style="width:100%; height:1px; background:#333; margin:2px 0;"></div>
+                    <div style="display:flex; justify-content:space-between; font-size:12px;"><span>Interval:</span> <span id="ident-interval" style="color:#fff; font-family:monospace;">-</span></div>
+                    <div style="display:flex; justify-content:space-between; font-size:12px;"><span>Frames:</span> <span id="ident-frames" style="color:#fff; font-family:monospace;">-</span></div>
+                    <div style="display:flex; justify-content:space-between; font-size:12px;"><span>Model:</span> <span id="ident-model" style="color:#00a8ff; font-family:monospace;">-</span></div>
+                </div>
+
+                <div id="tracking-accuracy-block" style="display:flex; flex-direction:column; margin-bottom:15px; padding-top:15px; border-top:1px solid #333;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                        <span style="font-size:12px; font-weight:bold; color:#aaa;">Tracking Accuracy</span>
+                        <div style="display:flex; align-items:stretch; height:28px; background:#1e1e1e; border:1px solid #555; border-radius:2px;">
+                            <input type="number" id="track-prop-alpha" value="0.31" min="0.01" max="1.00" step="0.01" style="width:45px; background:transparent; border:none; color:#fff; text-align:center; font-size:12px; outline:none; padding:0;">
+                            <div style="display:flex; flex-direction:column; width:16px; border-left:1px solid #444;">
+                                <button id="alpha-up" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; border-bottom:1px solid #444; padding:0; display:flex; align-items:center; justify-content:center;">▲</button>
+                                <button id="alpha-down" style="background:none; border:none; color:#aaa; font-size:9px; cursor:pointer; flex:1; padding:0; display:flex; align-items:center; justify-content:center;">▼</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="font-size:10px; color:#777; line-height:1.4; background:#111; padding:8px; border-radius:4px; border:1px solid #222;">
+                        <span style="color:#2ed573;">0.31 - 1.00:</span> High trust in current frame. Best for fast, erratic targets (snaps tight, adds jitter).<br>
+                        <span style="color:#00a8ff;">0.01 - 0.30:</span> High trust in history. Best for stable, predictable targets (smooths jitter, adds lag).
+                    </div>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:5px; margin-bottom:10px;">
+                    <button id="init-target-btn" class="action-btn" style="background-color:#00a8ff; margin:0; width:100%; opacity:0.3; pointer-events:none;">Initialize Target</button>
+                    <button id="edit-track-box-btn" class="action-btn" style="background-color:#f39c12; margin:0; display:none; width:100%;">Edit Size/Pos</button>
+                    <button id="reinit-track-box-btn" class="action-btn" style="background-color:#e67e22; margin:0; display:none; width:100%;">Re-initialize Target</button>
+                    
+                    <button id="confirm-track-box-btn" class="action-btn" style="background-color:#4cd137; margin:0; display:block; width:100%; opacity:0.3; pointer-events:none;">Confirm Target</button>
+                    <button id="process-tracking-btn" class="action-btn" style="background-color:#9b59b6; margin:0; display:none; width:100%;">Process Tracking</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="export-tab" class="tab-content">
+            <h3>Final Assembly</h3>
+            <button id="submit-queue-btn" class="action-btn" style="background-color:#4cd137;">Submit to Queue</button>
+        </div>
+    </div>
+
+    <script type="module" src="/static/js/main.js"></script>
+</body>
+</html>

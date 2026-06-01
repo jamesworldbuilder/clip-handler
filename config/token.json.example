@@ -1,0 +1,1 @@
+{"token": "<TOKEN>", "refresh_token": "<REFRESH_TOKEN>", "token_uri": "https://oauth2.googleapis.com/token", "client_id": "<CLIENT_ID>.apps.googleusercontent.com", "client_secret": "<CLIENT_SECRET>", "scopes": ["https://www.googleapis.com/auth/youtube.upload"], "universe_domain": "googleapis.com", "account": "", "expiry": "<EXPIRATION>"}
