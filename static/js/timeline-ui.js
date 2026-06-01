@@ -301,8 +301,21 @@ export function renderTimelineIntervals() {
             document.body.appendChild(rulerTooltip)
         }
 
-        // scales down font size for shorter intervals
-        const fontSize = dur < 2 ? '9px' : '11px'
+        // dynamically adapts font sizes and hiding thresholds based on absolute screen width 
+        const isCompactScreen = window.innerWidth < 970
+        const isSmallScreen = window.innerWidth < 1200
+        let fontSize = '11px'
+        let hideThreshold = 1
+
+        if (isCompactScreen) {
+            fontSize = '9px'
+            hideThreshold = 2.5
+        } else if (isSmallScreen) {
+            fontSize = '10px'
+            hideThreshold = 1.5
+        } else if (dur < 2) {
+            fontSize = '9px'
+        }
         
         for (let t = firstTick; t <= eTime - 0.001; t += step) {
             const pct = ((t - sTime) / dur) * 100
@@ -310,7 +323,7 @@ export function renderTimelineIntervals() {
             tick.className = 'default-ruler-tick'
             tick.style.cssText = `position:absolute; left:${pct}%; bottom:0; height:4px; width:1px; background-color:rgba(255, 255, 255, 0.4); transform:translateX(-50%); z-index:1;`
             
-            const timeStr = (Math.round(t * 1000) / 1000).toFixed(3) + 's'
+            const timeStr = (Math.round(t * 100) / 100).toFixed(2) + 's'
             
             const label = document.createElement('span')
             label.style.cssText = `position:absolute; left:4px; bottom:2px; color:#aaa; font-size:${fontSize}; font-family:monospace; transform-origin:left bottom;`
@@ -319,24 +332,27 @@ export function renderTimelineIntervals() {
             // identifies collision boundary to prevent text overlap beneath transparent end label
             const isCollisionZone = t > eTime - (dur * 0.12)
             
-            if (dur < 1 || isCollisionZone) {
+            if (dur < hideThreshold || isCollisionZone) {
                 label.style.display = 'none'
                 
-                // expands hit area for the tooltip interaction
-                const hitArea = document.createElement('div')
-                hitArea.style.cssText = 'position:absolute; bottom:0; left:-4px; right:-4px; height:15px; background:transparent; cursor:pointer; pointer-events:auto;'
-                tick.appendChild(hitArea)
-                
-                hitArea.addEventListener('mouseenter', () => {
-                    const rect = tick.getBoundingClientRect()
-                    rulerTooltip.innerText = timeStr
-                    rulerTooltip.style.left = rect.left + 'px'
-                    rulerTooltip.style.top = (rect.top - 20) + 'px'
-                    rulerTooltip.style.display = 'block'
-                })
-                hitArea.addEventListener('mouseleave', () => {
-                    rulerTooltip.style.display = 'none'
-                })
+                // prevents tooltip block over the zero mark so scrubber handle remains selectable
+                if (t >= 0.001) {
+                    // expands hit area for the tooltip interaction
+                    const hitArea = document.createElement('div')
+                    hitArea.style.cssText = 'position:absolute; bottom:0; left:-4px; right:-4px; height:15px; background:transparent; cursor:pointer; pointer-events:auto;'
+                    tick.appendChild(hitArea)
+                    
+                    hitArea.addEventListener('mouseenter', () => {
+                        const rect = tick.getBoundingClientRect()
+                        rulerTooltip.innerText = timeStr
+                        rulerTooltip.style.left = rect.left + 'px'
+                        rulerTooltip.style.top = (rect.top - 20) + 'px'
+                        rulerTooltip.style.display = 'block'
+                    })
+                    hitArea.addEventListener('mouseleave', () => {
+                        rulerTooltip.style.display = 'none'
+                    })
+                }
             }
             
             tick.appendChild(label)
@@ -349,7 +365,7 @@ export function renderTimelineIntervals() {
         
         const endLabel = document.createElement('span')
         endLabel.style.cssText = `position:absolute; left:4px; bottom:2px; color:#aaa; font-size:${fontSize}; font-family:monospace; transform-origin:left bottom; z-index:10;`
-        endLabel.innerText = (Math.round(eTime * 1000) / 1000).toFixed(3) + 's'
+        endLabel.innerText = (Math.round(eTime * 100) / 100).toFixed(2) + 's'
         
         endTick.appendChild(endLabel)
         ruler.appendChild(endTick)
@@ -817,7 +833,7 @@ export function renderTimelineIntervals() {
     startCursor.style.width = '4px'
     startCursor.style.height = '100%'
     startCursor.style.top = '0'
-    startCursor.style.transform = 'translateX(-50%)' // aligns center
+    startCursor.style.transform = 'translateX(-50%)' // restores true center alignment
     startCursor.style.backgroundColor = activeObj.timeLocked ? '#aaa' : '#fff'
     startCursor.style.cursor = activeObj.timeLocked ? 'default' : 'ew-resize'
     startCursor.style.zIndex = '20'
@@ -829,7 +845,7 @@ export function renderTimelineIntervals() {
     endCursor.style.width = '4px'
     endCursor.style.height = '100%'
     endCursor.style.top = '0'
-    endCursor.style.transform = 'translateX(-50%)' // aligns center
+    endCursor.style.transform = 'translateX(-50%)' // restores true center alignment
     endCursor.style.backgroundColor = activeObj.timeLocked ? '#aaa' : '#fff'
     endCursor.style.cursor = activeObj.timeLocked ? 'default' : 'ew-resize'
     endCursor.style.zIndex = '20'
@@ -855,6 +871,8 @@ export function renderTimelineIntervals() {
     let duration = 0
 
     const onMouseDown = (mode) => (e) => {
+        // Prevents native browser ghost dragging
+        e.preventDefault()
         e.stopPropagation()
         isDraggingBlock = true
         dragMode = mode
@@ -862,6 +880,13 @@ export function renderTimelineIntervals() {
         initialStart = activeObj.startTime
         initialEnd = activeObj.endTime
         duration = activeObj.endTime - activeObj.startTime
+        
+        // Prevents text highlighting across the page while dragging the interval block
+        document.body.style.userSelect = 'none'
+        
+        // Disables scrubber pointer events during drag to prevent interaction bleed
+        const sWrap = document.getElementById('scrubber-wrap')
+        if (sWrap) sWrap.style.pointerEvents = 'none'
         
         if (mode === 'move') durationLine.style.cursor = 'grabbing'
         
@@ -985,19 +1010,22 @@ export function renderTimelineIntervals() {
         endCursor.title = formatTime(newEnd)
 
         let targetTime = video.currentTime
-        if (dragMode === 'start' || dragMode === 'move') {
+        if (dragMode === 'start') {
             targetTime = newStart
         } else if (dragMode === 'end') {
             targetTime = newEnd
         }
 
         // 1 Sync UI elements instantly without waiting for the video decoder
-        const scrubber = document.getElementById('timeline-scrubber')
-        const progress = document.getElementById('scrubber-progress')
-        if (scrubber && progress && video.duration) {
-            scrubber.value = targetTime
-            progress.style.width = (targetTime / video.duration) * 100 + '%'
+        if (dragMode !== 'move') {
+            const scrubber = document.getElementById('timeline-scrubber')
+            const progress = document.getElementById('scrubber-progress')
+            if (scrubber && progress && video.duration) {
+                scrubber.value = targetTime
+                progress.style.width = (targetTime / video.duration) * 100 + '%'
+            }
         }
+        
         updateTimePanelUI(activeObj)
         
         const isVisible = targetTime >= activeObj.startTime && targetTime <= activeObj.endTime
@@ -1009,7 +1037,9 @@ export function renderTimelineIntervals() {
         }
 
         // 3 Feed the physical time to the background scrub engine
-        window.targetScrubTime = targetTime
+        if (dragMode !== 'move') {
+            window.targetScrubTime = targetTime
+        }
     }
 
     const onCursorDrop = () => {
@@ -1017,6 +1047,14 @@ export function renderTimelineIntervals() {
         const droppedMode = dragMode
         dragMode = null
         durationLine.style.cursor = 'grab'
+        
+        // Restores default text selection behavior after dropping
+        document.body.style.userSelect = ''
+        
+        // Restores scrubber pointer events after dropping
+        const sWrap = document.getElementById('scrubber-wrap')
+        if (sWrap) sWrap.style.pointerEvents = ''
+        
         document.removeEventListener('mousemove', onCursorDrag)
         document.removeEventListener('mouseup', onCursorDrop)
         
@@ -1063,7 +1101,7 @@ export function initTimelineBindings() {
         scrubberWrap.addEventListener('mousemove', (e) => {
             if (!video.duration) return
             
-            const rect = scrubber.getBoundingClientRect()
+            const rect = scrubberWrap.getBoundingClientRect() // mathematically anchors hover math to the absolute container bounds rather than the shifted native slider
             
             const hoverX = e.clientX - rect.left
             const thumbX = (scrubber.value / video.duration) * rect.width
@@ -1433,4 +1471,15 @@ export function initTimelineBindings() {
             if (isMultiTrackOpen) renderMultiTrackTimeline()
         })
     }
+    
+    // forcefully triggers dynamic layout recalculations for the ruler when the window resizes
+    let resizeTimeout
+    window.addEventListener('resize', () => {
+        if (resizeTimeout) clearTimeout(resizeTimeout)
+        resizeTimeout = setTimeout(() => {
+            if (window.isIntervalBlockZoomed && typeof renderTimelineIntervals === 'function') {
+                renderTimelineIntervals()
+            }
+        }, 100)
+    })
 }

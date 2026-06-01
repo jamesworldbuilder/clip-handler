@@ -4081,7 +4081,9 @@ export function initTransformsPanel(node) {
 
     const createTransformRow = (transformKey, configData, rowIdx) => {
         if (!configData.markerColor) {
-            const hue = Math.round((rowIdx * 137.5) % 360)
+            // Re-indexes hue math so first element strictly generates as standard blue (approx 210 hue)
+            const baseHue = 210
+            const hue = Math.round((baseHue + ((rowIdx - 1) * 137.5)) % 360)
             configData.markerColor = `hsl(${hue}, 100%, 50%)`
         }
         
@@ -4637,7 +4639,9 @@ export function initTransformsPanel(node) {
                     const lastKey = activeKeys[activeKeys.length - 1]
                     const lastInterval = configData.transformGroupData[lastKey].transform_interval || configData.transformGroupData[lastKey].interval
                     if (lastInterval && lastInterval.end !== undefined) {
-                        newStart = Number((lastInterval.end + 0.005).toFixed(3))
+                        // explicitly parses end value to float before mathematical addition to prevent string concatenation crashes
+                        const parsedEnd = parseFloat(lastInterval.end)
+                        newStart = Number((parsedEnd + 0.005).toFixed(3))
                         newEnd = Number((newStart + 0.2).toFixed(3))
                     }
                 } else {

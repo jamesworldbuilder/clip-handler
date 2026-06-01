@@ -168,8 +168,10 @@
 
         input[type=range] { -webkit-appearance:none; width:calc(100% + 4px); margin-left:-2px; background:transparent; position:absolute; z-index:3; outline:none }
         input[type=range]::-webkit-slider-runnable-track { width:100%; height:4px; cursor:pointer; background:transparent; transition:height 0.1s }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; height:24px; width:4px; border-radius:0; border:none; background:#f1c40f; cursor:pointer; margin-top:-10px; box-shadow:0 0 3px rgba(0,0,0,0.8) }
-        input[type=range]::-moz-range-thumb { height:24px; width:4px; border-radius:0; border:none; background:#f1c40f; cursor:pointer; box-shadow:0 0 3px rgba(0,0,0,0.8) }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; height:24px; width:4px; border-radius:0; border:none; background:#f1c40f; cursor:grab; margin-top:-10px; box-shadow:0 0 3px rgba(0,0,0,0.8) }
+        input[type=range]:active::-webkit-slider-thumb { cursor:grabbing; }
+        input[type=range]::-moz-range-thumb { height:24px; width:4px; border-radius:0; border:none; background:#f1c40f; cursor:grab; box-shadow:0 0 3px rgba(0,0,0,0.8) }
+        input[type=range]:active::-moz-range-thumb { cursor:grabbing; }
 
         #scrubber-progress { position:absolute; left:0; top:50%; transform:translateY(-50%); height:4px; background:#f1c40f; z-index:2; pointer-events:none; transition:height 0.1s }
         
@@ -226,7 +228,7 @@
     
     <div id="bottom-controls">
         <div style="width:100%; display:flex; flex-direction:column; padding:15px 20px 0 20px; box-sizing:border-box;">
-            <div id="zoom-sync-wrap" style="width:100%; overflow-x:hidden; padding-top:40px; margin-top:-40px; padding-bottom:5px; margin-bottom:-5px;">
+            <div id="zoom-sync-wrap" style="width:100%; overflow-x:hidden; padding-top:40px; margin-top:-40px; padding-bottom:5px; margin-bottom:-5px; padding-left:2px; padding-right:2px; box-sizing:border-box;">
                 <div id="zoom-scale-target" style="width:100%; transform-origin:left center; transition:width 0.2s;">
                     <div class="scrubber-container" id="scrubber-wrap" style="height:20px; width:100%; position:relative">
                         <div id="scrubber-tooltip">00:00:00 / 00:00:00</div>
