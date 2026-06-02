@@ -437,9 +437,7 @@ export function renderTimelineIntervals() {
         const counterScale = window.isIntervalBlockZoomed ? 0.4 : 1
         document.querySelectorAll('.tmarker-thread-label').forEach(lbl => {
             lbl.style.transform = `scaleY(${counterScale})`
-        })
-        document.querySelectorAll('.tmarker-val-label').forEach(lbl => {
-            lbl.style.transform = `translateX(-50%) scaleY(${counterScale})`
+            lbl.style.display = window.isIntervalBlockZoomed ? 'block' : 'none'
         })
     }
 
@@ -449,6 +447,18 @@ export function renderTimelineIntervals() {
         intervalBlock.style.transition = 'transform 0.2s ease'
         window.isIntervalBlockZoomed = !window.isIntervalBlockZoomed
         applyZoomState()
+        
+        if (!window.isIntervalBlockZoomed) {
+            document.querySelectorAll('.tmarker-thread-label.active-thread-label').forEach(lbl => {
+                lbl.classList.remove('active-thread-label')
+                lbl.style.color = '#000'
+            })
+            document.querySelectorAll('.tmarker-handle').forEach(m => {
+                m.style.pointerEvents = 'none'
+                m.style.cursor = 'default'
+            })
+            window.activeTMarkerThreadRenderer = null
+        }
         
         const blockTooltip = document.getElementById('interval-block-tooltip')
         if (blockTooltip) {
@@ -635,8 +645,34 @@ export function renderTimelineIntervals() {
                         threadLabel.className = 'tmarker-thread-label'
                         threadLabel.innerText = (i + 1).toString()
                         const counterScale = window.isIntervalBlockZoomed ? 0.4 : 1
-                        threadLabel.style.cssText = `color: #000; font-size: 8px; font-weight: bold; font-family: monospace; pointer-events: none; user-select: none; opacity: 0.5; transition: all 0.2s; transform: scaleY(${counterScale});`
+                        threadLabel.style.cssText = `color: #000; font-size: 8px; font-weight: bold; font-family: monospace; pointer-events: none; user-select: none; opacity: 0.5; transition: all 0.2s; transform: scaleY(${counterScale}); display: ${window.isIntervalBlockZoomed ? 'block' : 'none'};`
                         tmarkerThread.appendChild(threadLabel)
+
+                        tmarkerThread.addEventListener('mousemove', (e) => {
+                            e.stopPropagation()
+                            
+                            const blockTooltip = document.getElementById('interval-block-tooltip')
+                            if (blockTooltip) blockTooltip.style.display = 'none'
+
+                            let threadTooltip = document.getElementById('tmarker-thread-tooltip')
+                            if (!threadTooltip) {
+                                threadTooltip = document.createElement('div')
+                                threadTooltip.id = 'tmarker-thread-tooltip'
+                                threadTooltip.style.cssText = 'position:fixed; background:#2a2a2a; color:#fff; border:1px solid #555; padding:4px 8px; font-size:10px; font-family:monospace; border-radius:3px; pointer-events:none; z-index:10000;'
+                                document.body.appendChild(threadTooltip)
+                            }
+                            
+                            const isActive = threadLabel.classList.contains('active-thread-label')
+                            threadTooltip.innerText = isActive ? 'double-click to de-select element' : 'double-click to select element'
+                            threadTooltip.style.left = (e.clientX + 10) + 'px'
+                            threadTooltip.style.top = (e.clientY + 15) + 'px'
+                            threadTooltip.style.display = 'block'
+                        })
+
+                        tmarkerThread.addEventListener('mouseleave', () => {
+                            const threadTooltip = document.getElementById('tmarker-thread-tooltip')
+                            if (threadTooltip) threadTooltip.style.display = 'none'
+                        })
 
                         intervalBlock.appendChild(tmarkerThread)
 
@@ -661,38 +697,6 @@ export function renderTimelineIntervals() {
                             marker.style.pointerEvents = 'none'
                             
                             marker.title = `Transform Element ${i + 1} (${isStart ? 'Start' : 'End'}) (double-click to edit transform object)`
-                            
-                            const valSpan = document.createElement('span')
-                            valSpan.className = 'tmarker-val-label'
-                            const counterScale = window.isIntervalBlockZoomed ? 0.4 : 1
-                            valSpan.style.cssText = `position:absolute; top:-12px; left:50%; transform:translateX(-50%) scaleY(${counterScale}); color:${markerColor}; font-size:11px; font-family:monospace; font-weight:bold; pointer-events:none; display:none; z-index:20;`
-                            valSpan.innerText = isStart ? parseFloat(tInterval.start).toFixed(3) + 's' : parseFloat(tInterval.end).toFixed(3) + 's'
-                            marker.appendChild(valSpan)
-                            
-                            let tmarkerTooltip = document.getElementById('tmarker-hover-tooltip')
-                            if (!tmarkerTooltip) {
-                                tmarkerTooltip = document.createElement('div')
-                                tmarkerTooltip.id = 'tmarker-hover-tooltip'
-                                tmarkerTooltip.style.cssText = 'position:fixed; background:rgba(0,0,0,0.8); color:#fff; border:1px solid #555; padding:4px 8px; font-size:11px; font-family:monospace; border-radius:3px; pointer-events:none; z-index:999999; display:none; transform:translateX(-50%); white-space:nowrap;'
-                                document.body.appendChild(tmarkerTooltip)
-                            }
-
-                            marker.addEventListener('mouseenter', () => {
-                                if (marker.style.pointerEvents === 'auto' && valSpan.style.display === 'none') {
-                                    const rect = marker.getBoundingClientRect()
-                                    tmarkerTooltip.innerText = isStart ? parseFloat(tInterval.start).toFixed(3) + 's' : parseFloat(tInterval.end).toFixed(3) + 's'
-                                    tmarkerTooltip.style.left = rect.left + 'px'
-                                    tmarkerTooltip.style.top = (rect.top - 25) + 'px'
-                                    tmarkerTooltip.style.display = 'block'
-                                    tmarkerTooltip.style.borderColor = markerColor
-                                    tmarkerTooltip.style.color = markerColor
-                                }
-                            })
-                            marker.addEventListener('mouseleave', () => {
-                                if (!marker.isDragging) {
-                                    tmarkerTooltip.style.display = 'none'
-                                }
-                            })
 
                             marker.ondblclick = (e) => {
                                 e.stopPropagation()
@@ -757,18 +761,6 @@ export function renderTimelineIntervals() {
                                     // Invokes rendering engine to update marker labels in real-time
                                     if (window.activeTMarkerThreadRenderer) window.activeTMarkerThreadRenderer()
                                     
-                                    // Update tooltip position and text dynamically while dragging
-                                    const tTip = document.getElementById('tmarker-hover-tooltip')
-                                    if (tTip) {
-                                        const rect = marker.getBoundingClientRect()
-                                        tTip.innerText = newTime.toFixed(3) + 's'
-                                        tTip.style.left = rect.left + 'px'
-                                        tTip.style.top = (rect.top - 25) + 'px'
-                                        tTip.style.display = 'block'
-                                        tTip.style.borderColor = markerColor
-                                        tTip.style.color = markerColor
-                                    }
-                                    
                                     const tRows = document.getElementById('transforms-rows')
                                     if (tRows) {
                                         const row = Array.from(tRows.children).find(r => r.dataset.transformKey === tKey)
@@ -789,9 +781,6 @@ export function renderTimelineIntervals() {
                                     marker.isDragging = false
                                     document.removeEventListener('mousemove', onMouseMove)
                                     document.removeEventListener('mouseup', onMouseUp)
-                                    
-                                    const tTip = document.getElementById('tmarker-hover-tooltip')
-                                    if (tTip) tTip.style.display = 'none'
                                     
                                     activeObj.node.setAttr('transformGroupData', tGroupData)
                                     const tRows = document.getElementById('transforms-rows')
@@ -836,8 +825,48 @@ export function renderTimelineIntervals() {
 
                         tmarkerThread.ondblclick = (e) => {
                             e.stopPropagation()
+                            
+                            if (!window.isIntervalBlockZoomed) {
+                                intervalBlock.style.transition = 'transform 0.2s ease'
+                                window.isIntervalBlockZoomed = true
+                                applyZoomState()
+                                
+                                const blockTooltip = document.getElementById('interval-block-tooltip')
+                                if (blockTooltip) {
+                                    blockTooltip.innerText = 'double-click to revert'
+                                }
+                            }
+
                             const ruler = intervalBlock.querySelector('.zoom-ruler')
                             if (!ruler) return
+                            
+                            const isActive = threadLabel.classList.contains('active-thread-label')
+                            
+                            if (isActive) {
+                                threadLabel.classList.remove('active-thread-label')
+                                threadLabel.style.color = '#000'
+                                
+                                sMarker.style.pointerEvents = 'none'
+                                sMarker.style.cursor = 'default'
+                                eMarker.style.pointerEvents = 'none'
+                                eMarker.style.cursor = 'default'
+                                
+                                ruler.querySelectorAll('span').forEach(span => {
+                                    span.style.color = '#aaa'
+                                    span.style.opacity = '1'
+                                })
+                                
+                                const sDyn = ruler.querySelector('.s-dyn-ruler-val')
+                                if (sDyn) sDyn.remove()
+                                const eDyn = ruler.querySelector('.e-dyn-ruler-val')
+                                if (eDyn) eDyn.remove()
+                                
+                                const threadTooltip = document.getElementById('tmarker-thread-tooltip')
+                                if (threadTooltip) threadTooltip.innerText = 'double-click to select element'
+                                
+                                window.activeTMarkerThreadRenderer = null
+                                return
+                            }
                             
                             // Unlocks draggability specifically for the double-clicked thread's markers
                             document.querySelectorAll('.tmarker-handle').forEach(m => {
@@ -851,6 +880,7 @@ export function renderTimelineIntervals() {
 
                             // Highlight this thread label, reset others
                             document.querySelectorAll('.tmarker-thread-label').forEach(lbl => {
+                                lbl.classList.remove('active-thread-label')
                                 lbl.style.opacity = '0.5'
                                 lbl.style.color = '#000'
                                 lbl.style.textShadow = 'none'
@@ -859,20 +889,23 @@ export function renderTimelineIntervals() {
                                 lbl.style.borderRadius = '0'
                                 lbl.style.fontSize = '8px'
                             })
+                            
+                            threadLabel.classList.add('active-thread-label')
                             threadLabel.style.opacity = '1'
                             threadLabel.style.color = '#000'
-                            threadLabel.style.backgroundColor = markerColor
+                            threadLabel.style.backgroundColor = 'transparent'
                             threadLabel.style.textShadow = 'none'
-                            threadLabel.style.padding = '1px 4px'
-                            threadLabel.style.borderRadius = '2px'
-                            threadLabel.style.fontSize = '9px'
-
-                            // hide all existing val labels across other threads
-                            document.querySelectorAll('.tmarker-val-label').forEach(l => l.style.display = 'none')
+                            threadLabel.style.padding = '0'
+                            threadLabel.style.borderRadius = '0'
+                            threadLabel.style.fontSize = '8px'
                             
-                            // ensure any lingering tooltip is hidden initially
-                            const tTip = document.getElementById('tmarker-hover-tooltip')
-                            if (tTip) tTip.style.display = 'none'
+                            const threadTooltip = document.getElementById('tmarker-thread-tooltip')
+                            if (threadTooltip) threadTooltip.innerText = 'double-click to de-select element'
+                            
+                            const oldSDyn = ruler.querySelector('.s-dyn-ruler-val')
+                            if (oldSDyn) oldSDyn.remove()
+                            const oldEDyn = ruler.querySelector('.e-dyn-ruler-val')
+                            if (oldEDyn) oldEDyn.remove()
 
                             window.activeTMarkerThreadRenderer = () => {
                                 const sTimeVal = parseFloat(tInterval.start)
@@ -880,25 +913,51 @@ export function renderTimelineIntervals() {
                                 const sPctVal = (sTimeVal - activeObj.startTime) / (activeObj.endTime - activeObj.startTime)
                                 const ePctVal = (eTimeVal - activeObj.startTime) / (activeObj.endTime - activeObj.startTime)
                                 
-                                const sLabel = sMarker.querySelector('.tmarker-val-label')
-                                const eLabel = eMarker.querySelector('.tmarker-val-label')
+                                const sValLabel = sMarker.querySelector('.tmarker-val-label')
+                                const eValLabel = eMarker.querySelector('.tmarker-val-label')
                                 
-                                sLabel.innerText = sTimeVal.toFixed(3) + 's'
-                                eLabel.innerText = eTimeVal.toFixed(3) + 's'
+                                if (sValLabel) sValLabel.style.display = 'none'
+                                if (eValLabel) eValLabel.style.display = 'none'
                                 
-                                const rect = intervalBlock.getBoundingClientRect()
-                                const distPx = (ePctVal - sPctVal) * rect.width
-                                
-                                // dynamically hides text if interval length causes labels to overlap
-                                if (distPx < 85) { 
-                                    sLabel.style.display = 'none'
-                                    eLabel.style.display = 'none'
-                                } else {
-                                    sLabel.style.display = 'block'
-                                    eLabel.style.display = 'block'
+                                const currentRuler = intervalBlock.querySelector('.zoom-ruler')
+                                if (currentRuler && window.isIntervalBlockZoomed) {
+                                    // Calculates a pixel-perfect time collision threshold based on container width
+                                    const rulerRect = currentRuler.getBoundingClientRect()
+                                    const timePerPixel = (activeObj.endTime - activeObj.startTime) / rulerRect.width
+                                    const thresholdTime = timePerPixel * 35 // 35px is the safe bounding box for the monospace time string
+                                    
+                                    currentRuler.querySelectorAll('.default-ruler-tick span, .end-ruler-tick span').forEach(span => {
+                                        span.style.color = '#aaa'
+                                        const tickTime = parseFloat(span.innerText)
+                                        if (Math.abs(tickTime - sTimeVal) < thresholdTime || Math.abs(tickTime - eTimeVal) < thresholdTime) {
+                                            span.style.opacity = '0'
+                                        } else {
+                                            span.style.opacity = '1'
+                                        }
+                                    })
+                                    
+                                    let sDyn = currentRuler.querySelector('.s-dyn-ruler-val')
+                                    if (!sDyn) {
+                                        sDyn = document.createElement('span')
+                                        sDyn.className = 's-dyn-ruler-val'
+                                        sDyn.style.cssText = `position:absolute; bottom:2px; color:${markerColor}; font-size:8px; font-family:monospace; transform-origin:left bottom; z-index:20; pointer-events:none;`
+                                        currentRuler.appendChild(sDyn)
+                                    }
+                                    let eDyn = currentRuler.querySelector('.e-dyn-ruler-val')
+                                    if (!eDyn) {
+                                        eDyn = document.createElement('span')
+                                        eDyn.className = 'e-dyn-ruler-val'
+                                        eDyn.style.cssText = `position:absolute; bottom:2px; color:${markerColor}; font-size:8px; font-family:monospace; transform-origin:left bottom; z-index:20; pointer-events:none;`
+                                        currentRuler.appendChild(eDyn)
+                                    }
+                                    
+                                    sDyn.innerText = sTimeVal.toFixed(3) + 's'
+                                    sDyn.style.left = `calc(${sPctVal * 100}% + 4px)`
+                                    
+                                    eDyn.innerText = eTimeVal.toFixed(3) + 's'
+                                    eDyn.style.left = `calc(${ePctVal * 100}% + 4px)`
                                 }
                             }
-                            
                             window.activeTMarkerThreadRenderer()
                         }
                     }
