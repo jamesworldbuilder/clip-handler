@@ -4565,14 +4565,14 @@ export function initTransformsPanel(node) {
                             const sGroup = timingDiv.querySelector('[data-target="start"]')
                             const eGroup = timingDiv.querySelector('[data-target="end"]')
                             if (sGroup) {
-                                const p = getTimeParts(tInterval.start || 0)
+                                const p = getTimeParts(parseFloat(tInterval.start) || 0)
                                 sGroup.querySelector('[data-type="h"]').innerText = p.h
                                 sGroup.querySelector('[data-type="m"]').innerText = p.m
                                 sGroup.querySelector('[data-type="s"]').innerText = p.s
                                 sGroup.querySelector('[data-type="ms"]').innerText = p.ms
                             }
                             if (eGroup) {
-                                const p = getTimeParts(tInterval.end || 0)
+                                const p = getTimeParts(parseFloat(tInterval.end) || 0)
                                 eGroup.querySelector('[data-type="h"]').innerText = p.h
                                 eGroup.querySelector('[data-type="m"]').innerText = p.m
                                 eGroup.querySelector('[data-type="s"]').innerText = p.s
@@ -4759,7 +4759,7 @@ export function initTransformsPanel(node) {
             const activeIdx = configData.activeTransformEditIndex || 0
             const activeTConfig = configData.transformGroupData && configData.transformGroupData[activeIdx] ? configData.transformGroupData[activeIdx] : {}
             const tInterval = activeTConfig.transform_interval || { start: 0.05, end: 0.25 }
-            const p = getTimeParts(tInterval[key] || 0)
+            const p = getTimeParts(parseFloat(tInterval[key]) || 0)
             
             group.innerHTML = `
                 <span class="time-segment" data-type="h">${p.h}</span>:
@@ -4871,14 +4871,14 @@ export function initTransformsPanel(node) {
                     const sGroup = newTimingDiv.querySelector('[data-target="start"]')
                     const eGroup = newTimingDiv.querySelector('[data-target="end"]')
                     if (sGroup) {
-                        const sParts = getTimeParts(cfg.interval.start || 0)
+                        const sParts = getTimeParts(parseFloat(cfg.interval.start) || 0)
                         sGroup.querySelector('[data-type="h"]').innerText = sParts.h
                         sGroup.querySelector('[data-type="m"]').innerText = sParts.m
                         sGroup.querySelector('[data-type="s"]').innerText = sParts.s
                         sGroup.querySelector('[data-type="ms"]').innerText = sParts.ms
                     }
                     if (eGroup) {
-                        const eParts = getTimeParts(cfg.interval.end || 0)
+                        const eParts = getTimeParts(parseFloat(cfg.interval.end) || 0)
                         eGroup.querySelector('[data-type="h"]').innerText = eParts.h
                         eGroup.querySelector('[data-type="m"]').innerText = eParts.m
                         eGroup.querySelector('[data-type="s"]').innerText = eParts.s

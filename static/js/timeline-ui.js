@@ -247,6 +247,12 @@ export function renderTimelineIntervals() {
     intervalBlock.style.cssText = `position:absolute; left:${startPct}%; top:0; width:${widthPct}%; height:100%; pointer-events:auto;`
 
     intervalBlock.addEventListener('mousemove', (e) => {
+        if (e.target !== intervalBlock && e.target !== durationLine) {
+            const blockTooltip = document.getElementById('interval-block-tooltip')
+            if (blockTooltip) blockTooltip.style.display = 'none'
+            return
+        }
+        
         let blockTooltip = document.getElementById('interval-block-tooltip')
         if (!blockTooltip) {
             blockTooltip = document.createElement('div')
@@ -385,6 +391,8 @@ export function renderTimelineIntervals() {
             
             if (syncWrap && scaleTarget) {
                 syncWrap.style.overflowX = 'auto'
+                syncWrap.style.paddingTop = '60px'
+                syncWrap.style.marginTop = '-60px'
                 scaleTarget.style.width = '250%'
                 
                 let scrollStyle = document.getElementById('zoom-scroll-style')
@@ -426,6 +434,8 @@ export function renderTimelineIntervals() {
             if (syncWrap && scaleTarget) {
                 syncWrap.scrollLeft = 0
                 syncWrap.style.overflowX = 'hidden'
+                syncWrap.style.paddingTop = '40px'
+                syncWrap.style.marginTop = '-40px'
                 scaleTarget.style.width = '100%'
                 
                 const zoomTooltip = document.getElementById('zoom-hover-tooltip')
@@ -439,6 +449,22 @@ export function renderTimelineIntervals() {
             lbl.style.transform = `scaleY(${counterScale})`
             lbl.style.display = window.isIntervalBlockZoomed ? 'block' : 'none'
         })
+        
+        const scrubberTooltip = document.getElementById('scrubber-tooltip')
+        if (scrubberTooltip) {
+            scrubberTooltip.style.transition = 'margin-top 0.2s ease'
+            scrubberTooltip.style.marginTop = window.isIntervalBlockZoomed ? '-20px' : '0px'
+            scrubberTooltip.style.zIndex = window.isIntervalBlockZoomed ? '999999' : ''
+        }
+        
+        const sWrap = document.getElementById('scrubber-wrap')
+        if (sWrap) {
+            sWrap.style.zIndex = window.isIntervalBlockZoomed ? '105' : ''
+            sWrap.style.overflow = window.isIntervalBlockZoomed ? 'visible' : ''
+            if (window.isIntervalBlockZoomed && window.getComputedStyle(sWrap).position === 'static') {
+                sWrap.style.position = 'relative'
+            }
+        }
     }
 
     intervalBlock.addEventListener('dblclick', (e) => {
@@ -649,11 +675,12 @@ export function renderTimelineIntervals() {
                         tmarkerThread.appendChild(threadLabel)
 
                         tmarkerThread.addEventListener('mousemove', (e) => {
-                            e.stopPropagation()
+                            if (e.buttons > 0) {
+                                const threadTooltip = document.getElementById('tmarker-thread-tooltip')
+                                if (threadTooltip) threadTooltip.style.display = 'none'
+                                return
+                            }
                             
-                            const blockTooltip = document.getElementById('interval-block-tooltip')
-                            if (blockTooltip) blockTooltip.style.display = 'none'
-
                             let threadTooltip = document.getElementById('tmarker-thread-tooltip')
                             if (!threadTooltip) {
                                 threadTooltip = document.createElement('div')
@@ -722,6 +749,16 @@ export function renderTimelineIntervals() {
                                 const initialPct = (isStart ? parseFloat(tInterval.start) - activeObj.startTime : parseFloat(tInterval.end) - activeObj.startTime) / (activeObj.endTime - activeObj.startTime)
                                 const parentRect = durationLine.getBoundingClientRect()
                                 
+                                // Caches the DOM queries outside the high-frequency mousemove listener to prevent layout blocking
+                                const tRows = document.getElementById('transforms-rows')
+                                let cachedSidebarGroup = null
+                                if (tRows) {
+                                    const row = Array.from(tRows.children).find(r => r.dataset.transformKey === tKey)
+                                    if (row) {
+                                        cachedSidebarGroup = row.querySelector(isStart ? '[data-target="start"]' : '[data-target="end"]')
+                                    }
+                                }
+                                
                                 const onMouseMove = (moveEvent) => {
                                     const delta = (moveEvent.clientX - startX) / parentRect.width
                                     let newPct = initialPct + delta
@@ -744,9 +781,8 @@ export function renderTimelineIntervals() {
                                     if (isStart) tInterval.start = newTime.toFixed(3) + 's'
                                     else tInterval.end = newTime.toFixed(3) + 's'
                                     
-                                    // Dynamically updates JSON config while dragging
+                                    // Dynamically updates JSON config silently to prevent UI blocking
                                     activeObj.node.setAttr('transformGroupData', tGroupData)
-                                    if (window.updateAdvancedConfigDisplay) window.updateAdvancedConfigDisplay()
                                     
                                     // Dynamically shrinks or stretches the physical tmarker thread as boundaries shift
                                     if (isStart) {
@@ -761,19 +797,12 @@ export function renderTimelineIntervals() {
                                     // Invokes rendering engine to update marker labels in real-time
                                     if (window.activeTMarkerThreadRenderer) window.activeTMarkerThreadRenderer()
                                     
-                                    const tRows = document.getElementById('transforms-rows')
-                                    if (tRows) {
-                                        const row = Array.from(tRows.children).find(r => r.dataset.transformKey === tKey)
-                                        if (row) {
-                                            const tGroup = row.querySelector(isStart ? '[data-target="start"]' : '[data-target="end"]')
-                                            if (tGroup) {
-                                                const p = getTimeParts(isStart ? parseFloat(tInterval.start) : parseFloat(tInterval.end))
-                                                tGroup.querySelector('[data-type="h"]').innerText = p.h
-                                                tGroup.querySelector('[data-type="m"]').innerText = p.m
-                                                tGroup.querySelector('[data-type="s"]').innerText = p.s
-                                                tGroup.querySelector('[data-type="ms"]').innerText = p.ms
-                                            }
-                                        }
+                                    if (cachedSidebarGroup) {
+                                        const p = getTimeParts(isStart ? parseFloat(tInterval.start) : parseFloat(tInterval.end))
+                                        cachedSidebarGroup.querySelector('[data-type="h"]').innerText = p.h
+                                        cachedSidebarGroup.querySelector('[data-type="m"]').innerText = p.m
+                                        cachedSidebarGroup.querySelector('[data-type="s"]').innerText = p.s
+                                        cachedSidebarGroup.querySelector('[data-type="ms"]').innerText = p.ms
                                     }
                                 }
                                 
@@ -808,6 +837,7 @@ export function renderTimelineIntervals() {
                                             }
                                         }
                                     }
+                                    // Heavy JSON stringification shifted entirely to mouseup to keep drag buttery smooth
                                     if (window.updateAdvancedConfigDisplay) window.updateAdvancedConfigDisplay()
                                     if (typeof renderMultiTrackTimeline === 'function') renderMultiTrackTimeline()
                                 }
@@ -907,6 +937,8 @@ export function renderTimelineIntervals() {
                             const oldEDyn = ruler.querySelector('.e-dyn-ruler-val')
                             if (oldEDyn) oldEDyn.remove()
 
+                            let cachedRulerRectWidth = null;
+
                             window.activeTMarkerThreadRenderer = () => {
                                 const sTimeVal = parseFloat(tInterval.start)
                                 const eTimeVal = parseFloat(tInterval.end)
@@ -921,9 +953,12 @@ export function renderTimelineIntervals() {
                                 
                                 const currentRuler = intervalBlock.querySelector('.zoom-ruler')
                                 if (currentRuler && window.isIntervalBlockZoomed) {
-                                    // Calculates a pixel-perfect time collision threshold based on container width
-                                    const rulerRect = currentRuler.getBoundingClientRect()
-                                    const timePerPixel = (activeObj.endTime - activeObj.startTime) / rulerRect.width
+                                    // Caches the width to prevent massive layout thrashing and freezing during high-speed drag
+                                    if (!cachedRulerRectWidth) {
+                                        cachedRulerRectWidth = currentRuler.getBoundingClientRect().width;
+                                    }
+                                    
+                                    const timePerPixel = (activeObj.endTime - activeObj.startTime) / (cachedRulerRectWidth || 1000)
                                     const thresholdTime = timePerPixel * 35 // 35px is the safe bounding box for the monospace time string
                                     
                                     currentRuler.querySelectorAll('.default-ruler-tick span, .end-ruler-tick span').forEach(span => {
