@@ -3,6 +3,37 @@ import { switchTab, openTextEditor, openShapeEditor, openImageEditor, openFilter
 
 export let isMultiTrackOpen = false
 
+export function updateCaptionsListColorIndicators() {
+    const activeObj = getActiveObj()
+    if (!activeObj || !activeObj.node) return
+    const captionColors = activeObj.node.getAttr('captionColors') || []
+    if (captionColors.length === 0) return
+
+    const items = document.querySelectorAll('.captions-list-item, .caption-list-item, .caption-row, .captions-row, .caption-item, .captions-item, #captions-list > div, #captions-container > div, #caption-list > div, #caption-container > div')
+    items.forEach((item, idx) => {
+        if (idx < captionColors.length) {
+            const color = captionColors[idx]
+            let indicator = item.querySelector('.caption-color-indicator')
+            if (!indicator) {
+                indicator = document.createElement('span')
+                indicator.className = 'caption-color-indicator'
+                indicator.style.cssText = 'display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; flex-shrink:0;'
+                item.insertBefore(indicator, item.firstChild)
+            }
+            if (indicator.style.backgroundColor !== color) {
+                indicator.style.backgroundColor = color
+            }
+        }
+    })
+}
+
+if (typeof document !== 'undefined') {
+    const observer = new MutationObserver(() => {
+        updateCaptionsListColorIndicators()
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+}
+
 export function renderMultiTrackTimeline() {
     const container = document.getElementById('multi-track-container')
     if (!container || !isMultiTrackOpen) return
@@ -375,6 +406,42 @@ export function renderTimelineIntervals() {
         
         endTick.appendChild(endLabel)
         ruler.appendChild(endTick)
+
+        // Render active caption marker on the ruler if selected
+        if (activeObj.node && activeObj.node.getAttr('captionsGroupName')) {
+            const activeIdx = activeObj.node.getAttr('activeCaptionEditIndex')
+            if (activeIdx !== undefined && activeIdx !== null) {
+                const capList = activeObj.node.getAttr('captionsList') || []
+                const timings = activeObj.node.getAttr('captionTimings') || []
+                if (activeIdx >= 0 && activeIdx < capList.length && timings[activeIdx] !== undefined) {
+                    const captionColors = activeObj.node.getAttr('captionColors') || []
+                    const mColor = captionColors[activeIdx] || '#ffffff'
+                    const markerTime = activeObj.startTime + (timings[activeIdx] * (activeObj.endTime - activeObj.startTime))
+                    const markerPctVal = timings[activeIdx]
+                    
+                    // Hide nearby standard ticks
+                    const timePerPixel = (activeObj.endTime - activeObj.startTime) / (ruler.getBoundingClientRect().width || 1000)
+                    const thresholdTime = timePerPixel * 35
+                    
+                    ruler.querySelectorAll('.default-ruler-tick span, .end-ruler-tick span').forEach(span => {
+                        const tickTime = parseFloat(span.innerText)
+                        if (!isNaN(tickTime) && Math.abs(tickTime - markerTime) < thresholdTime) {
+                            span.style.opacity = '0'
+                        }
+                    })
+                    
+                    let capDyn = ruler.querySelector('.cap-dyn-ruler-val')
+                    if (!capDyn) {
+                        capDyn = document.createElement('span')
+                        capDyn.className = 'cap-dyn-ruler-val'
+                        capDyn.style.cssText = `position:absolute; bottom:2px; color:${mColor}; font-size:8px; font-family:monospace; transform-origin:left bottom; z-index:20; pointer-events:none;`
+                        ruler.appendChild(capDyn)
+                    }
+                    capDyn.innerText = markerTime.toFixed(3) + 's'
+                    capDyn.style.left = `calc(${markerPctVal * 100}% + 4px)`
+                }
+            }
+        }
     }
     
     const applyZoomState = () => {
@@ -384,6 +451,9 @@ export function renderTimelineIntervals() {
         const activeObj = getActiveObj()
         const video = document.getElementById('main-video')
         
+        const capTooltip = document.getElementById('captions-tooltip')
+        if (capTooltip) capTooltip.style.display = 'none'
+
         if (window.isIntervalBlockZoomed) {
             intervalBlock.style.transformOrigin = 'left center'
             intervalBlock.style.transform = 'scaleY(2.5)' // Expands height for marker labels
@@ -493,7 +563,10 @@ export function renderTimelineIntervals() {
     })
     
     // defers immediate application to ensure all markers are successfully appended to the DOM block first
-    setTimeout(() => applyZoomState(), 0)
+    setTimeout(() => {
+        applyZoomState()
+        updateCaptionsListColorIndicators()
+    }, 0)
 
     durationLine.style.position = 'absolute'
     durationLine.style.left = '0%'
@@ -517,6 +590,36 @@ export function renderTimelineIntervals() {
                 activeObj.node.setAttr('captionTimings', timings)
             }
 
+            let captionColors = activeObj.node.getAttr('captionColors') || []
+            if (captionColors.length !== capList.length) {
+                const getRandomColor = (index) => {
+                    const types = ['cyan', 'magenta', 'yellow']
+                    const type = types[index % 3]
+                    const high = () => Math.floor(Math.random() * 76) + 180
+                    const low = () => Math.floor(Math.random() * 51)
+                    let r, g, b
+                    if (type === 'cyan') {
+                        r = low()
+                        g = high()
+                        b = high()
+                    } else if (type === 'magenta') {
+                        r = high()
+                        g = low()
+                        b = high()
+                    } else {
+                        r = high()
+                        g = high()
+                        b = low()
+                    }
+                    const hex = (val) => val.toString(16).padStart(2, '0')
+                    return `#${hex(r)}${hex(g)}${hex(b)}`
+                }
+                while (captionColors.length < capList.length) {
+                    captionColors.push(getRandomColor(captionColors.length))
+                }
+                activeObj.node.setAttr('captionColors', captionColors)
+            }
+
             for (let i = 0; i < capList.length; i++) {
                 const marker = document.createElement('div')
                 marker.style.position = 'absolute'
@@ -529,7 +632,9 @@ export function renderTimelineIntervals() {
                 marker.style.boxSizing = 'border-box'
                 marker.style.backgroundClip = 'content-box'
                 marker.style.transform = 'translateX(-50%)'
-                marker.style.backgroundColor = '#ffffff'
+                
+                const markerColor = captionColors[i] || '#ffffff'
+                marker.style.backgroundColor = markerColor
                 marker.style.cursor = 'ew-resize'
                 marker.style.zIndex = '10'
                 marker.style.pointerEvents = 'auto'
@@ -538,7 +643,52 @@ export function renderTimelineIntervals() {
                 const textVal = capList[i] || ''
                 const truncated = textVal.length > 15 ? textVal.substring(0, 15) + '...' : textVal
                 marker.title = `${truncated} (double-click to edit text object)`
+
+                marker.addEventListener('mouseenter', (e) => {
+                    if (window.isIntervalBlockZoomed) return
+                    let capTooltip = document.getElementById('captions-tooltip')
+                    if (!capTooltip) {
+                        capTooltip = document.createElement('div')
+                        capTooltip.id = 'captions-tooltip'
+                        capTooltip.style.cssText = 'position:fixed; background:#2a2a2a; color:#fff; border:1px solid #555; padding:4px 8px; font-size:10px; font-family:monospace; border-radius:3px; pointer-events:none; z-index:10000;'
+                        document.body.appendChild(capTooltip)
+                    }
+                    const markerTime = activeObj.startTime + (timings[i] * (activeObj.endTime - activeObj.startTime))
+                    capTooltip.innerText = markerTime.toFixed(2) + 's'
+                    capTooltip.style.left = (e.clientX + 10) + 'px'
+                    capTooltip.style.top = (e.clientY + 15) + 'px'
+                    capTooltip.style.display = 'block'
+                })
+
+                marker.addEventListener('mousemove', (e) => {
+                    if (window.isIntervalBlockZoomed) {
+                        const capTooltip = document.getElementById('captions-tooltip')
+                        if (capTooltip) capTooltip.style.display = 'none'
+                        return
+                    }
+                    const capTooltip = document.getElementById('captions-tooltip')
+                    if (capTooltip) {
+                        const markerTime = activeObj.startTime + (timings[i] * (activeObj.endTime - activeObj.startTime))
+                        capTooltip.innerText = markerTime.toFixed(2) + 's'
+                        capTooltip.style.left = (e.clientX + 10) + 'px'
+                        capTooltip.style.top = (e.clientY + 15) + 'px'
+                    }
+                })
+
+                marker.addEventListener('mouseleave', () => {
+                    const capTooltip = document.getElementById('captions-tooltip')
+                    if (capTooltip) capTooltip.style.display = 'none'
+                })
                 
+                marker.onclick = (e) => {
+                    e.stopPropagation()
+                    activeObj.node.setAttr('activeCaptionEditIndex', i)
+                    if (window.isIntervalBlockZoomed) {
+                        updateRulerTicks()
+                    }
+                    setTimeout(updateCaptionsListColorIndicators, 50)
+                }
+
                 marker.ondblclick = (e) => {
                     e.stopPropagation()
                     activeObj.node.setAttr('activeCaptionEditIndex', i)
@@ -555,6 +705,10 @@ export function renderTimelineIntervals() {
                         }
                     }
                     
+                    if (window.isIntervalBlockZoomed) {
+                        updateRulerTicks()
+                    }
+                    
                     switchTab('layers-tab')
                     openTextEditor(activeObj.node)
                 }
@@ -563,6 +717,12 @@ export function renderTimelineIntervals() {
                 marker.onmousedown = (e) => {
                     e.preventDefault()
                     e.stopPropagation()
+                    
+                    activeObj.node.setAttr('activeCaptionEditIndex', i)
+                    if (window.isIntervalBlockZoomed) {
+                        updateRulerTicks()
+                    }
+                    setTimeout(updateCaptionsListColorIndicators, 50)
                     
                     const startX = e.clientX
                     const startPctVal = timings[i]
@@ -581,12 +741,27 @@ export function renderTimelineIntervals() {
                         timings[i] = newPct
                         const currentMarkerPct = newPct * 100
                         marker.style.left = `${currentMarkerPct}%`
+                        
+                        if (window.isIntervalBlockZoomed) {
+                            updateRulerTicks()
+                        } else {
+                            const capTooltip = document.getElementById('captions-tooltip')
+                            if (capTooltip) {
+                                const markerTime = activeObj.startTime + (newPct * (activeObj.endTime - activeObj.startTime))
+                                capTooltip.innerText = markerTime.toFixed(2) + 's'
+                                capTooltip.style.left = (moveEvent.clientX + 10) + 'px'
+                                capTooltip.style.top = (moveEvent.clientY + 15) + 'px'
+                            }
+                        }
                     }
                     
                     const onMouseUp = () => {
                         document.removeEventListener('mousemove', onMouseMove)
                         document.removeEventListener('mouseup', onMouseUp)
                         activeObj.node.setAttr('captionTimings', timings)
+                        
+                        const capTooltip = document.getElementById('captions-tooltip')
+                        if (capTooltip) capTooltip.style.display = 'none'
                         
                         // Force multi-track timeline sync to visually reflect new marker positions
                         if (typeof renderMultiTrackTimeline === 'function') renderMultiTrackTimeline()

@@ -5349,6 +5349,31 @@ export function initTransformsPanel(node) {
     }
 }
 
+function adjustScrollIfNeeded(element) {
+    if (!element) return
+    const rect = element.getBoundingClientRect()
+    const elementCenterY = rect.top + rect.height / 2
+    const viewportCenterY = window.innerHeight / 2
+    if (elementCenterY > viewportCenterY) {
+        let parent = element.parentElement
+        while (parent && parent !== document.body) {
+            const overflowY = window.getComputedStyle(parent).overflowY
+            if (overflowY === 'auto' || overflowY === 'scroll') {
+                break
+            }
+            parent = parent.parentElement
+        }
+        const scrollContainer = parent || window
+        const targetViewportY = viewportCenterY - 60
+        const diff = elementCenterY - targetViewportY
+        if (scrollContainer === window) {
+            window.scrollBy({ top: diff, behavior: 'smooth' })
+        } else {
+            scrollContainer.scrollBy({ top: diff, behavior: 'smooth' })
+        }
+    }
+}
+
 export function initAdvancedTransformBindings() {
     const advancedExpander = document.getElementById('advanced-transform-expander')
     const advancedOptions = document.getElementById('advanced-transform-options')
@@ -5358,6 +5383,7 @@ export function initAdvancedTransformBindings() {
             advancedOptions.style.display = isHidden ? 'flex' : 'none'
             advancedExpander.innerText = isHidden ? '▲ Advanced Options' : '▼ Advanced Options'
             advancedExpander.style.color = isHidden ? '#fff' : '#aaa'
+            adjustScrollIfNeeded(advancedExpander)
         }
     }
 
@@ -5367,15 +5393,17 @@ export function initAdvancedTransformBindings() {
             const isOn = blockToggle.style.backgroundColor === 'rgb(0, 168, 255)' || blockToggle.style.backgroundColor === '#00a8ff'
             blockToggle.style.backgroundColor = isOn ? '#34495e' : '#00a8ff'
             if (window.updateAdvancedConfigDisplay) window.updateAdvancedConfigDisplay()
+            adjustScrollIfNeeded(blockToggle)
         }
     }
     
     const styleToggle = document.getElementById('transform-styling-toggle')
-    if (styleToggle) {
+    if (styleToggle) { 
         styleToggle.onclick = () => {
             const isOn = styleToggle.style.backgroundColor === 'rgb(0, 168, 255)' || styleToggle.style.backgroundColor === '#00a8ff'
             styleToggle.style.backgroundColor = isOn ? '#34495e' : '#00a8ff'
             if (window.updateAdvancedConfigDisplay) window.updateAdvancedConfigDisplay()
+            adjustScrollIfNeeded(styleToggle)
         }
     }
 }
@@ -5789,6 +5817,7 @@ export function initSidebarToggleBindings() {
             advancedOptions.style.display = isHidden ? 'flex' : 'none'
             advancedExpander.innerText = isHidden ? '▲ Advanced Options' : '▼ Advanced Options'
             advancedExpander.style.color = isHidden ? '#fff' : '#aaa'
+            adjustScrollIfNeeded(advancedExpander)
         }
     }
 
@@ -5797,6 +5826,7 @@ export function initSidebarToggleBindings() {
         blockToggle.onclick = () => {
             const isOn = blockToggle.style.backgroundColor === 'rgb(0, 168, 255)' || blockToggle.style.backgroundColor === '#00a8ff'
             blockToggle.style.backgroundColor = isOn ? '#34495e' : '#00a8ff'
+            adjustScrollIfNeeded(blockToggle)
         }
     }
     
@@ -5805,6 +5835,7 @@ export function initSidebarToggleBindings() {
         styleToggle.onclick = () => {
             const isOn = styleToggle.style.backgroundColor === 'rgb(0, 168, 255)' || styleToggle.style.backgroundColor === '#00a8ff'
             styleToggle.style.backgroundColor = isOn ? '#34495e' : '#00a8ff'
+            adjustScrollIfNeeded(styleToggle)
         }
     }
 }
