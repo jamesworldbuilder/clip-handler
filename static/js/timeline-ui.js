@@ -304,17 +304,17 @@ export function renderTimelineIntervals() {
         // dynamically adapts font sizes and hiding thresholds based on absolute screen width 
         const isCompactScreen = window.innerWidth < 970
         const isSmallScreen = window.innerWidth < 1200
-        let fontSize = '11px'
+        let fontSize = '8px'
         let hideThreshold = 1
 
         if (isCompactScreen) {
-            fontSize = '9px'
+            fontSize = '7px'
             hideThreshold = 2.5
         } else if (isSmallScreen) {
-            fontSize = '10px'
+            fontSize = '8px'
             hideThreshold = 1.5
         } else if (dur < 2) {
-            fontSize = '9px'
+            fontSize = '8px'
         }
         
         for (let t = firstTick; t <= eTime - 0.001; t += step) {
@@ -380,7 +380,7 @@ export function renderTimelineIntervals() {
         
         if (window.isIntervalBlockZoomed) {
             intervalBlock.style.transformOrigin = 'left center'
-            intervalBlock.style.transform = 'scaleY(1.75)'
+            intervalBlock.style.transform = 'scaleY(2.5)' // Expands height for marker labels
             intervalBlock.style.zIndex = '100'
             
             if (syncWrap && scaleTarget) {
@@ -432,6 +432,15 @@ export function renderTimelineIntervals() {
                 if (zoomTooltip) zoomTooltip.style.display = 'none'
             }
         }
+        
+        // Prevents text stretching by counter-scaling labels against the container's transform ratio
+        const counterScale = window.isIntervalBlockZoomed ? 0.4 : 1
+        document.querySelectorAll('.tmarker-thread-label').forEach(lbl => {
+            lbl.style.transform = `scaleY(${counterScale})`
+        })
+        document.querySelectorAll('.tmarker-val-label').forEach(lbl => {
+            lbl.style.transform = `translateX(-50%) scaleY(${counterScale})`
+        })
     }
 
     intervalBlock.addEventListener('dblclick', (e) => {
@@ -617,6 +626,17 @@ export function renderTimelineIntervals() {
                         } else {
                             tmarkerThread.style.backgroundColor = markerColor
                         }
+                        
+                        tmarkerThread.style.display = 'flex'
+                        tmarkerThread.style.alignItems = 'center'
+                        tmarkerThread.style.justifyContent = 'center'
+                        
+                        const threadLabel = document.createElement('span')
+                        threadLabel.className = 'tmarker-thread-label'
+                        threadLabel.innerText = (i + 1).toString()
+                        const counterScale = window.isIntervalBlockZoomed ? 0.4 : 1
+                        threadLabel.style.cssText = `color: #000; font-size: 8px; font-weight: bold; font-family: monospace; pointer-events: none; user-select: none; opacity: 0.5; transition: all 0.2s; transform: scaleY(${counterScale});`
+                        tmarkerThread.appendChild(threadLabel)
 
                         intervalBlock.appendChild(tmarkerThread)
 
@@ -642,6 +662,38 @@ export function renderTimelineIntervals() {
                             
                             marker.title = `Transform Element ${i + 1} (${isStart ? 'Start' : 'End'}) (double-click to edit transform object)`
                             
+                            const valSpan = document.createElement('span')
+                            valSpan.className = 'tmarker-val-label'
+                            const counterScale = window.isIntervalBlockZoomed ? 0.4 : 1
+                            valSpan.style.cssText = `position:absolute; top:-12px; left:50%; transform:translateX(-50%) scaleY(${counterScale}); color:${markerColor}; font-size:11px; font-family:monospace; font-weight:bold; pointer-events:none; display:none; z-index:20;`
+                            valSpan.innerText = isStart ? parseFloat(tInterval.start).toFixed(3) + 's' : parseFloat(tInterval.end).toFixed(3) + 's'
+                            marker.appendChild(valSpan)
+                            
+                            let tmarkerTooltip = document.getElementById('tmarker-hover-tooltip')
+                            if (!tmarkerTooltip) {
+                                tmarkerTooltip = document.createElement('div')
+                                tmarkerTooltip.id = 'tmarker-hover-tooltip'
+                                tmarkerTooltip.style.cssText = 'position:fixed; background:rgba(0,0,0,0.8); color:#fff; border:1px solid #555; padding:4px 8px; font-size:11px; font-family:monospace; border-radius:3px; pointer-events:none; z-index:999999; display:none; transform:translateX(-50%); white-space:nowrap;'
+                                document.body.appendChild(tmarkerTooltip)
+                            }
+
+                            marker.addEventListener('mouseenter', () => {
+                                if (marker.style.pointerEvents === 'auto' && valSpan.style.display === 'none') {
+                                    const rect = marker.getBoundingClientRect()
+                                    tmarkerTooltip.innerText = isStart ? parseFloat(tInterval.start).toFixed(3) + 's' : parseFloat(tInterval.end).toFixed(3) + 's'
+                                    tmarkerTooltip.style.left = rect.left + 'px'
+                                    tmarkerTooltip.style.top = (rect.top - 25) + 'px'
+                                    tmarkerTooltip.style.display = 'block'
+                                    tmarkerTooltip.style.borderColor = markerColor
+                                    tmarkerTooltip.style.color = markerColor
+                                }
+                            })
+                            marker.addEventListener('mouseleave', () => {
+                                if (!marker.isDragging) {
+                                    tmarkerTooltip.style.display = 'none'
+                                }
+                            })
+
                             marker.ondblclick = (e) => {
                                 e.stopPropagation()
                                 const tRows = document.getElementById('transforms-rows')
@@ -660,6 +712,7 @@ export function renderTimelineIntervals() {
                             marker.onmousedown = (e) => {
                                 e.preventDefault()
                                 e.stopPropagation()
+                                marker.isDragging = true
                                 
                                 const startX = e.clientX
                                 const initialPct = (isStart ? parseFloat(tInterval.start) - activeObj.startTime : parseFloat(tInterval.end) - activeObj.startTime) / (activeObj.endTime - activeObj.startTime)
@@ -701,8 +754,20 @@ export function renderTimelineIntervals() {
                                         tmarkerThread.style.width = `${(newPct - startPctVal) * 100}%`
                                     }
                                     
-                                    // Invokes rendering engine to update ruler ticks in real-time
+                                    // Invokes rendering engine to update marker labels in real-time
                                     if (window.activeTMarkerThreadRenderer) window.activeTMarkerThreadRenderer()
+                                    
+                                    // Update tooltip position and text dynamically while dragging
+                                    const tTip = document.getElementById('tmarker-hover-tooltip')
+                                    if (tTip) {
+                                        const rect = marker.getBoundingClientRect()
+                                        tTip.innerText = newTime.toFixed(3) + 's'
+                                        tTip.style.left = rect.left + 'px'
+                                        tTip.style.top = (rect.top - 25) + 'px'
+                                        tTip.style.display = 'block'
+                                        tTip.style.borderColor = markerColor
+                                        tTip.style.color = markerColor
+                                    }
                                     
                                     const tRows = document.getElementById('transforms-rows')
                                     if (tRows) {
@@ -721,8 +786,12 @@ export function renderTimelineIntervals() {
                                 }
                                 
                                 const onMouseUp = () => {
+                                    marker.isDragging = false
                                     document.removeEventListener('mousemove', onMouseMove)
                                     document.removeEventListener('mouseup', onMouseUp)
+                                    
+                                    const tTip = document.getElementById('tmarker-hover-tooltip')
+                                    if (tTip) tTip.style.display = 'none'
                                     
                                     activeObj.node.setAttr('transformGroupData', tGroupData)
                                     const tRows = document.getElementById('transforms-rows')
@@ -780,43 +849,54 @@ export function renderTimelineIntervals() {
                             eMarker.style.pointerEvents = 'auto'
                             eMarker.style.cursor = 'ew-resize'
 
+                            // Highlight this thread label, reset others
+                            document.querySelectorAll('.tmarker-thread-label').forEach(lbl => {
+                                lbl.style.opacity = '0.5'
+                                lbl.style.color = '#000'
+                                lbl.style.textShadow = 'none'
+                                lbl.style.backgroundColor = 'transparent'
+                                lbl.style.padding = '0'
+                                lbl.style.borderRadius = '0'
+                                lbl.style.fontSize = '8px'
+                            })
+                            threadLabel.style.opacity = '1'
+                            threadLabel.style.color = '#000'
+                            threadLabel.style.backgroundColor = markerColor
+                            threadLabel.style.textShadow = 'none'
+                            threadLabel.style.padding = '1px 4px'
+                            threadLabel.style.borderRadius = '2px'
+                            threadLabel.style.fontSize = '9px'
+
+                            // hide all existing val labels across other threads
+                            document.querySelectorAll('.tmarker-val-label').forEach(l => l.style.display = 'none')
+                            
+                            // ensure any lingering tooltip is hidden initially
+                            const tTip = document.getElementById('tmarker-hover-tooltip')
+                            if (tTip) tTip.style.display = 'none'
+
                             window.activeTMarkerThreadRenderer = () => {
-                                Array.from(ruler.querySelectorAll('.tmarker-highlight-tick')).forEach(el => el.remove())
+                                const sTimeVal = parseFloat(tInterval.start)
+                                const eTimeVal = parseFloat(tInterval.end)
+                                const sPctVal = (sTimeVal - activeObj.startTime) / (activeObj.endTime - activeObj.startTime)
+                                const ePctVal = (eTimeVal - activeObj.startTime) / (activeObj.endTime - activeObj.startTime)
                                 
-                                Array.from(ruler.querySelectorAll('.default-ruler-tick, .end-ruler-tick')).forEach(tick => {
-                                    tick.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'
-                                    const span = tick.querySelector('span')
-                                    if (span) span.style.color = 'rgba(170, 170, 170, 0.3)'
-                                })
+                                const sLabel = sMarker.querySelector('.tmarker-val-label')
+                                const eLabel = eMarker.querySelector('.tmarker-val-label')
                                 
-                                const injectHighlightTick = (timeVal) => {
-                                    const dur = activeObj.endTime - activeObj.startTime
-                                    const pct = ((timeVal - activeObj.startTime) / dur) * 100
-                                    const timeStr = (Math.round(timeVal * 1000) / 1000).toFixed(3) + 's'
-                                    
-                                    const allSpans = Array.from(ruler.querySelectorAll('span'))
-                                    const existingSpan = allSpans.find(s => s.innerText === timeStr && !s.parentElement.className.includes('tmarker-highlight-tick'))
-                                    
-                                    if (existingSpan && (existingSpan.parentElement.className.includes('default-ruler-tick') || existingSpan.parentElement.className.includes('end-ruler-tick'))) {
-                                        existingSpan.style.color = markerColor
-                                        existingSpan.parentElement.style.backgroundColor = markerColor
-                                    } else {
-                                        const tick = document.createElement('div')
-                                        tick.className = 'tmarker-highlight-tick'
-                                        const alignTrans = timeVal === activeObj.endTime ? 'translateX(-100%)' : 'translateX(-50%)'
-                                        tick.style.cssText = `position:absolute; left:${pct}%; bottom:0; height:4px; width:1px; background-color:${markerColor}; transform:${alignTrans}; z-index:10;`
-                                        
-                                        const label = document.createElement('span')
-                                        label.style.cssText = `position:absolute; left:2px; bottom:2px; color:${markerColor}; font-size:8px; font-family:monospace; transform-origin:left bottom; z-index:10;`
-                                        label.innerText = timeStr
-                                        
-                                        tick.appendChild(label)
-                                        ruler.appendChild(tick)
-                                    }
+                                sLabel.innerText = sTimeVal.toFixed(3) + 's'
+                                eLabel.innerText = eTimeVal.toFixed(3) + 's'
+                                
+                                const rect = intervalBlock.getBoundingClientRect()
+                                const distPx = (ePctVal - sPctVal) * rect.width
+                                
+                                // dynamically hides text if interval length causes labels to overlap
+                                if (distPx < 85) { 
+                                    sLabel.style.display = 'none'
+                                    eLabel.style.display = 'none'
+                                } else {
+                                    sLabel.style.display = 'block'
+                                    eLabel.style.display = 'block'
                                 }
-                                
-                                injectHighlightTick(parseFloat(tInterval.start))
-                                injectHighlightTick(parseFloat(tInterval.end))
                             }
                             
                             window.activeTMarkerThreadRenderer()
@@ -1089,25 +1169,51 @@ export function initTimelineBindings() {
     const video = document.getElementById('main-video')
     
     if (scrubberWrap && scrubber && video) {
+        window.isDraggingScrubber = false
+
+        document.addEventListener('mouseup', () => {
+            if (window.isDraggingScrubber) {
+                window.isDraggingScrubber = false
+                const hoverTooltip = document.getElementById('hover-tooltip')
+                if (hoverTooltip) hoverTooltip.style.display = ''
+                
+                // Safely dismisses the enlarged tooltip if the drag ends outside the hover boundary
+                if (window.isIntervalBlockZoomed) {
+                    if (scrubberWrap && !scrubberWrap.matches(':hover')) {
+                        const zoomTooltip = document.getElementById('zoom-hover-tooltip')
+                        if (zoomTooltip) zoomTooltip.style.display = 'none'
+                    }
+                }
+            }
+        })
+
         scrubberWrap.addEventListener('dblclick', () => scrubberWrap.classList.add('hide-hint'))
         scrubberWrap.addEventListener('mouseleave', () => {
+            // Actively prevents the tooltip from disappearing if cursor strays while dragging in zoom state
+            if (window.isDraggingScrubber && window.isIntervalBlockZoomed) return
+
             scrubberWrap.classList.remove('hide-hint')
             scrubberWrap.classList.remove('hover-handle')
             
             const zoomTooltip = document.getElementById('zoom-hover-tooltip')
             if (zoomTooltip) zoomTooltip.style.display = 'none'
+            
+            // Safely resets the native tooltip's visibility state when the mouse completely leaves the track
+            const hoverTooltip = document.getElementById('hover-tooltip')
+            if (hoverTooltip) hoverTooltip.style.display = ''
         })
 
         scrubberWrap.addEventListener('mousemove', (e) => {
             if (!video.duration) return
             
-            const rect = scrubberWrap.getBoundingClientRect() // mathematically anchors hover math to the absolute container bounds rather than the shifted native slider
+            const rect = scrubberWrap.getBoundingClientRect() 
             
             const hoverX = e.clientX - rect.left
             const thumbX = (scrubber.value / video.duration) * rect.width
             
-            // blankets the visibility class across DOM layers to prevent CSS selector breakage
-            if (Math.abs(hoverX - thumbX) < 15 || window.isIntervalBlockZoomed) {
+            const isHoveringHandle = Math.abs(hoverX - thumbX) < 15
+            
+            if (isHoveringHandle || window.isIntervalBlockZoomed) {
                 scrubberWrap.classList.add('hover-handle')
                 scrubber.classList.add('hover-handle')
             } else {
@@ -1115,14 +1221,12 @@ export function initTimelineBindings() {
                 scrubber.classList.remove('hover-handle')
             }
 
-            // delegates native layout geometry directly to physical hover offset
             let hoverTime = (hoverX / rect.width) * video.duration
             
             hoverTime = Math.max(0, Math.min(hoverTime, video.duration))
             hoverTime = Math.round(hoverTime * 1000) / 1000
             const p = getTimeParts(hoverTime)
             
-            // strictly constructs 2-digit millisecond frame format
             let msStr = ''
             if (window.isIntervalBlockZoomed) {
                 const msVal = String(p.ms || '0').padStart(3, '0')
@@ -1131,7 +1235,6 @@ export function initTimelineBindings() {
             
             const finalStr = `${p.h}:${p.m}:${p.s}${msStr}`
             
-            // propagates generated tooltip across all potential CSS anchor points
             scrubber.setAttribute('hover-tooltip', finalStr)
             scrubberWrap.setAttribute('hover-tooltip', finalStr)
             
@@ -1139,11 +1242,9 @@ export function initTimelineBindings() {
             let zoomTooltip = document.getElementById('zoom-hover-tooltip')
             
             if (window.isIntervalBlockZoomed) {
-                // spins up a physical DOM node to bypass CSS container clipping natively caused by overflow properties
                 if (!zoomTooltip) {
                     zoomTooltip = document.createElement('div')
                     zoomTooltip.id = 'zoom-hover-tooltip'
-                    // Forces an extreme z-index to comfortably clear the sidebar layer stack
                     zoomTooltip.style.cssText = 'position:fixed; background:#2a2a2a; color:#fff; border:1px solid #555; padding:4px 8px; font-size:10px; font-family:monospace; border-radius:3px; pointer-events:none; z-index:999999;'
                     document.body.appendChild(zoomTooltip)
                 }
@@ -1155,15 +1256,23 @@ export function initTimelineBindings() {
                 zoomTooltip.style.transform = 'translateX(-50%)'
                 zoomTooltip.style.display = 'block'
                 
-                if (hoverTooltip) hoverTooltip.innerText = finalStr
+                if (hoverTooltip) hoverTooltip.style.display = 'none'
             } else {
                 if (zoomTooltip) zoomTooltip.style.display = 'none'
-                if (hoverTooltip) hoverTooltip.innerText = finalStr
+                
+                if (hoverTooltip) {
+                    hoverTooltip.innerText = finalStr
+                    
+                    if (window.isDraggingScrubber || isHoveringHandle) {
+                        hoverTooltip.style.display = 'none'
+                    } else {
+                        hoverTooltip.style.display = 'block'
+                        hoverTooltip.style.zIndex = '100' // Ensures it visually displays over top of the static scrubber-tooltip
+                    }
+                }
             }
         })
 
-        // 1 Install the continuous hardware-safe scrubbing engine
-        // This completely decouples mouse polling from the decoder eliminating queue lag
         if (!window.scrubEngine) {
             window.scrubEngine = true
             window.targetScrubTime = null
@@ -1171,7 +1280,6 @@ export function initTimelineBindings() {
             const processScrub = () => {
                 const vid = document.getElementById('main-video')
                 if (vid && window.targetScrubTime !== null) {
-                    // Only forces a new frame when the decoder is physically ready to paint it
                     if (!vid.seeking) {
                         vid.currentTime = window.targetScrubTime
                         window.targetScrubTime = null
@@ -1182,29 +1290,52 @@ export function initTimelineBindings() {
             requestAnimationFrame(processScrub)
         }
 
-        // removes legacy seek handlers
         if (window.scrubSeekHandler) {
             video.removeEventListener('seeked', window.scrubSeekHandler)
             window.scrubSeekHandler = null
         }
 
         scrubber.addEventListener('mousedown', () => {
+            window.isDraggingScrubber = true
+            
+            if (!window.isIntervalBlockZoomed) {
+                const hoverTooltip = document.getElementById('hover-tooltip')
+                if (hoverTooltip) hoverTooltip.style.display = 'none'
+            }
+            
             video.pause()
             const playBtn = document.getElementById('play-pause-btn')
             if (playBtn) playBtn.innerText = 'Play'
         })
 
-        // applies liquid-smooth native scrubbing via the decoupled engine
         scrubber.addEventListener('input', (e) => {
             const newTime = parseFloat(e.target.value)
             if (!isNaN(newTime)) {
-                // UI updates instantly
                 const progress = document.getElementById('scrubber-progress')
                 if (progress && video.duration) {
                     progress.style.width = (newTime / video.duration) * 100 + '%'
                 }
-                // Video decoder updates at its maximum hardware speed in the background
                 window.targetScrubTime = newTime
+                
+                // Mathematically locks the enlarged tooltip to the moving thumb coordinates to bypass mouseleave clipping 
+                if (window.isIntervalBlockZoomed && window.isDraggingScrubber) {
+                    const zoomTooltip = document.getElementById('zoom-hover-tooltip')
+                    if (zoomTooltip && scrubberWrap) {
+                        const rect = scrubberWrap.getBoundingClientRect()
+                        const thumbX = (newTime / video.duration) * rect.width
+                        const absoluteX = rect.left + thumbX
+                        
+                        const p = getTimeParts(newTime)
+                        const msVal = String(p.ms || '0').padStart(3, '0')
+                        const msStr = ':' + msVal.substring(0, 2)
+                        const finalStr = `${p.h}:${p.m}:${p.s}${msStr}`
+                        
+                        zoomTooltip.innerText = finalStr
+                        zoomTooltip.style.left = absoluteX + 'px'
+                        zoomTooltip.style.top = (rect.top - 25) + 'px'
+                        zoomTooltip.style.display = 'block'
+                    }
+                }
             }
         })
     }
