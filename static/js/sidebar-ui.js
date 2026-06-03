@@ -3689,8 +3689,9 @@ window.updateAdvancedConfigDisplay = () => {
     
     // auto-generates a default first index element for newly created objects
     if (markers.length === 0) {
-        const sTime = targetNode.getAttr('transformGroupData')?.[valStr]?.interval?.start ?? (currentObj ? currentObj.startTime + 0.05 : 0.05)
-        const eTime = targetNode.getAttr('transformGroupData')?.[valStr]?.interval?.end ?? (currentObj ? currentObj.endTime - 0.05 : 0.25)
+        const baseStart = targetNode.getAttr('transformGroupData')?.[valStr]?.interval?.start ?? (currentObj ? currentObj.startTime : 0)
+        const sTime = Number((parseFloat(baseStart) + 0.05).toFixed(3))
+        const eTime = Number((sTime + 0.15).toFixed(3))
         tData = { "0": { transform_interval: { start: sTime, end: eTime } } }
         markers = Object.keys(tData)
     }
@@ -4566,7 +4567,15 @@ export function initTransformsPanel(node) {
             })
             
             // tightly couples the matrix data to the row's configData to prevent sync overwrites
-            if (!configData.transformGroupData) configData.transformGroupData = { 0: {} }
+            if (!configData.transformGroupData) {
+                let defaultStart = configData.interval && configData.interval.start !== undefined ? Number((parseFloat(configData.interval.start) + 0.05).toFixed(3)) : 0.05
+                let defaultEnd = Number((defaultStart + 0.15).toFixed(3))
+                configData.transformGroupData = { 0: { transform_interval: { start: defaultStart, end: defaultEnd } } }
+            } else if (configData.transformGroupData[0] && !configData.transformGroupData[0].transform_interval) {
+                let defaultStart = configData.interval && configData.interval.start !== undefined ? Number((parseFloat(configData.interval.start) + 0.05).toFixed(3)) : 0.05
+                let defaultEnd = Number((defaultStart + 0.15).toFixed(3))
+                configData.transformGroupData[0].transform_interval = { start: defaultStart, end: defaultEnd }
+            }
             let totalMarkers = Object.keys(configData.transformGroupData).length
             if (totalMarkers > 64) totalMarkers = 64 // caps element rendering at absolute maximum of 64 objects
             
@@ -4597,7 +4606,9 @@ export function initTransformsPanel(node) {
                         const timingDiv = tRow.querySelector('.transform-interval-timing')
                         if (timingDiv) {
                             const activeTConfig = configData.transformGroupData[i] || {}
-                            const tInterval = activeTConfig.transform_interval || { start: 0.05, end: 0.25 }
+                            const fallbackStart = configData.interval && configData.interval.start !== undefined ? Number((parseFloat(configData.interval.start) + 0.05).toFixed(3)) : 0.05
+                            const fallbackEnd = Number((fallbackStart + 0.15).toFixed(3))
+                            const tInterval = activeTConfig.transform_interval || { start: fallbackStart, end: fallbackEnd }
                             
                             const sGroup = timingDiv.querySelector('[data-target="start"]')
                             const eGroup = timingDiv.querySelector('[data-target="end"]')
@@ -4627,6 +4638,10 @@ export function initTransformsPanel(node) {
                         delete window._matrixScrollPreserve
                     }
                     if (layersTab) layersTab.scrollTop = cachedParentScroll
+                    
+                    window._forceTimelineAutoSelect = true
+                    if (typeof renderTimelineIntervals === 'function') renderTimelineIntervals()
+                    if (typeof renderMultiTrackTimeline === 'function') renderMultiTrackTimeline()
                 }
                 gridScrollArea.appendChild(matrixBtn)
             }
@@ -4678,14 +4693,14 @@ export function initTransformsPanel(node) {
                     if (lastInterval && lastInterval.end !== undefined) {
                         // explicitly parses end value to float before mathematical addition to prevent string concatenation crashes
                         const parsedEnd = parseFloat(lastInterval.end)
-                        newStart = Number((parsedEnd + 0.005).toFixed(3))
-                        newEnd = Number((newStart + 0.2).toFixed(3))
+                        newStart = Number((parsedEnd + 0.05).toFixed(3))
+                        newEnd = Number((newStart + 0.15).toFixed(3))
                     }
                 } else {
                     // fallbacks to root tracking container limits if it is the first index position
                     if (configData.interval && configData.interval.start !== undefined) {
-                        newStart = configData.interval.start
-                        newEnd = Number((newStart + 0.2).toFixed(3))
+                        newStart = Number((parseFloat(configData.interval.start) + 0.05).toFixed(3))
+                        newEnd = Number((newStart + 0.15).toFixed(3))
                     }
                 }
                 
@@ -4710,6 +4725,10 @@ export function initTransformsPanel(node) {
                 if (typeof syncTransformsFromDOM === 'function') {
                     syncTransformsFromDOM()
                 }
+                
+                window._forceTimelineAutoSelect = true
+                if (typeof renderTimelineIntervals === 'function') renderTimelineIntervals()
+                if (typeof renderMultiTrackTimeline === 'function') renderMultiTrackTimeline()
                 
                 // forces the advanced properties terminal to scroll to the absolute bottom bounds natively
                 const configDisplay = document.getElementById('advanced-config-display')
@@ -4766,6 +4785,9 @@ export function initTransformsPanel(node) {
                 if (typeof syncTransformsFromDOM === 'function') {
                     syncTransformsFromDOM()
                 }
+                
+                if (typeof renderTimelineIntervals === 'function') renderTimelineIntervals()
+                if (typeof renderMultiTrackTimeline === 'function') renderMultiTrackTimeline()
             }
 
             actionGroup.appendChild(addMatrixBtn)
@@ -4795,7 +4817,9 @@ export function initTransformsPanel(node) {
             
             const activeIdx = configData.activeTransformEditIndex || 0
             const activeTConfig = configData.transformGroupData && configData.transformGroupData[activeIdx] ? configData.transformGroupData[activeIdx] : {}
-            const tInterval = activeTConfig.transform_interval || { start: 0.05, end: 0.25 }
+            const fallbackStart = configData.interval && configData.interval.start !== undefined ? Number((parseFloat(configData.interval.start) + 0.05).toFixed(3)) : 0.05
+            const fallbackEnd = Number((fallbackStart + 0.15).toFixed(3))
+            const tInterval = activeTConfig.transform_interval || { start: fallbackStart, end: fallbackEnd }
             const p = getTimeParts(parseFloat(tInterval[key]) || 0)
             
             group.innerHTML = `
@@ -4827,6 +4851,8 @@ export function initTransformsPanel(node) {
             const layersTab = document.getElementById('layers-tab')
             const cachedParentScroll = layersTab ? layersTab.scrollTop : 0
             
+            const currentKey = row.dataset.transformKey || transformKey
+            
             // Automatically select the parent transform-row
             const targetId = configData.id
             let targetNode = null
@@ -4834,13 +4860,15 @@ export function initTransformsPanel(node) {
                 appLayers.forEach(l => {
                     if (l.objects) {
                         l.objects.forEach(o => {
-                            if (o.id === targetId || (o.node && o.node.id() === targetId) || (o.node && o.node.name() === transformKey)) {
+                            if (o.id === targetId || (o.node && o.node.id() === targetId) || (o.node && o.node.name() === currentKey)) {
                                 targetNode = o.node
                             }
                         })
                     }
                 })
             }
+            
+            window._preventMatrixReset = true
             
             if (targetNode) {
                 const currentIdx = rowIdx - 1
@@ -4882,10 +4910,19 @@ export function initTransformsPanel(node) {
             
             // Find the new row in the DOM after the panel has been rebuilt
             const newRowsContainer = document.getElementById('transforms-rows')
-            if (!newRowsContainer) return
+            if (!newRowsContainer) {
+                window._preventMatrixReset = false
+                return
+            }
             
-            const newRow = Array.from(newRowsContainer.children).find(r => r.dataset.transformKey === transformKey)
-            if (!newRow) return
+            let newRow = Array.from(newRowsContainer.children).find(r => r.dataset.transformKey === currentKey)
+            if (!newRow && newRowsContainer.contains(row)) {
+                newRow = row
+            }
+            if (!newRow) {
+                window._preventMatrixReset = false
+                return
+            }
             
             // Highlight the new row
             Array.from(newRowsContainer.children).forEach(r => {
@@ -4900,7 +4937,10 @@ export function initTransformsPanel(node) {
             const newMatrixDiv = newRow.querySelector('.transform-elements-container')
             const newTimeBtn = newRow.querySelector('#set-transform-interval-btn')
             
-            if (!newTimingDiv || !newMatrixDiv || !newTimeBtn) return
+            if (!newTimingDiv || !newMatrixDiv || !newTimeBtn) {
+                window._preventMatrixReset = false
+                return
+            }
             
             const isHidden = newTimingDiv.style.display === 'none'
             newTimingDiv.style.display = isHidden ? 'flex' : 'none'
@@ -4914,30 +4954,33 @@ export function initTransformsPanel(node) {
             
             if (typeof activeNode !== 'undefined' && activeNode) {
                 let existingData = activeNode.getAttr('transformGroupData')
-                if (existingData && existingData[transformKey]) {
-                    existingData[transformKey].isTimingOpen = isHidden
+                if (existingData && existingData[currentKey]) {
+                    existingData[currentKey].isTimingOpen = isHidden
                     activeNode.setAttr('transformGroupData', existingData)
                 }
             }
             
             if (isHidden) {
-                if (cfg.interval) {
-                    const sGroup = newTimingDiv.querySelector('[data-target="start"]')
-                    const eGroup = newTimingDiv.querySelector('[data-target="end"]')
-                    if (sGroup) {
-                        const sParts = getTimeParts(parseFloat(cfg.interval.start) || 0)
-                        sGroup.querySelector('[data-type="h"]').innerText = sParts.h
-                        sGroup.querySelector('[data-type="m"]').innerText = sParts.m
-                        sGroup.querySelector('[data-type="s"]').innerText = sParts.s
-                        sGroup.querySelector('[data-type="ms"]').innerText = sParts.ms
-                    }
-                    if (eGroup) {
-                        const eParts = getTimeParts(parseFloat(cfg.interval.end) || 0)
-                        eGroup.querySelector('[data-type="h"]').innerText = eParts.h
-                        eGroup.querySelector('[data-type="m"]').innerText = eParts.m
-                        eGroup.querySelector('[data-type="s"]').innerText = eParts.s
-                        eGroup.querySelector('[data-type="ms"]').innerText = eParts.ms
-                    }
+                const activeTConfig = cfg.transformGroupData && cfg.transformGroupData[cfg.activeTransformEditIndex || 0] ? cfg.transformGroupData[cfg.activeTransformEditIndex || 0] : {}
+                const fallbackStart = cfg.interval && cfg.interval.start !== undefined ? Number((parseFloat(cfg.interval.start) + 0.05).toFixed(3)) : 0.05
+                const fallbackEnd = Number((fallbackStart + 0.15).toFixed(3))
+                const tInterval = activeTConfig.transform_interval || { start: fallbackStart, end: fallbackEnd }
+                
+                const sGroup = newTimingDiv.querySelector('[data-target="start"]')
+                const eGroup = newTimingDiv.querySelector('[data-target="end"]')
+                if (sGroup) {
+                    const sParts = getTimeParts(parseFloat(tInterval.start) || 0)
+                    sGroup.querySelector('[data-type="h"]').innerText = sParts.h
+                    sGroup.querySelector('[data-type="m"]').innerText = sParts.m
+                    sGroup.querySelector('[data-type="s"]').innerText = sParts.s
+                    sGroup.querySelector('[data-type="ms"]').innerText = sParts.ms
+                }
+                if (eGroup) {
+                    const eParts = getTimeParts(parseFloat(tInterval.end) || 0)
+                    eGroup.querySelector('[data-type="h"]').innerText = eParts.h
+                    eGroup.querySelector('[data-type="m"]').innerText = eParts.m
+                    eGroup.querySelector('[data-type="s"]').innerText = eParts.s
+                    eGroup.querySelector('[data-type="ms"]').innerText = eParts.ms
                 }
             }
             
@@ -4947,6 +4990,8 @@ export function initTransformsPanel(node) {
             if (layersTab) layersTab.scrollTop = cachedParentScroll
             
             if (window.updateAdvancedConfigDisplay) window.updateAdvancedConfigDisplay()
+            
+            window._preventMatrixReset = false
         }
         
         row.appendChild(rowTop)

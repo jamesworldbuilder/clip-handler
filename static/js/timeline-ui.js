@@ -592,7 +592,22 @@ export function renderTimelineIntervals() {
     setTimeout(() => {
         applyZoomState()
         updateCaptionsListColorIndicators()
-    }, 0)
+        
+        if ((window.isIntervalBlockZoomed || window._forceTimelineAutoSelect) && activeObj && activeObj.node && activeObj.node.getAttr('transformGroupName')) {
+            const activeEditIdx = activeObj.node.getAttr('activeTransformEditIndex')
+            if (activeEditIdx !== undefined && activeEditIdx !== null) {
+                const threads = intervalBlock.querySelectorAll('.tmarker-thread')
+                threads.forEach(thread => {
+                    if (parseInt(thread.dataset.matrixIndex, 10) === activeEditIdx) {
+                        if (typeof thread.ondblclick === 'function') {
+                            thread.ondblclick({ preventDefault: () => {}, stopPropagation: () => {}, isSyntheticAutoSelect: true })
+                        }
+                    }
+                })
+            }
+            window._forceTimelineAutoSelect = false
+        }
+    }, 10)
 
     durationLine.style.position = 'absolute'
     durationLine.style.left = '0%'
@@ -864,6 +879,7 @@ export function renderTimelineIntervals() {
 
                         const tmarkerThread = document.createElement('div')
                         tmarkerThread.className = 'tmarker-thread'
+                        tmarkerThread.dataset.matrixIndex = i
                         tmarkerThread.style.position = 'absolute'
                         tmarkerThread.style.left = `${sPct * 100}%`
                         tmarkerThread.style.width = `${(ePct - sPct) * 100}%`
@@ -1073,8 +1089,8 @@ export function renderTimelineIntervals() {
                         const eMarker = createInteractiveMarker(false, ePct)
 
                         tmarkerThread.ondblclick = (e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
+                            if (e && e.preventDefault) e.preventDefault()
+                            if (e && e.stopPropagation) e.stopPropagation()
                             
                             if (!window.isIntervalBlockZoomed) {
                                 intervalBlock.style.transition = 'transform 0.2s ease'
@@ -1093,6 +1109,8 @@ export function renderTimelineIntervals() {
                             const isActive = threadLabel.classList.contains('active-thread-label')
                             
                             if (isActive) {
+                                if (e && e.isSyntheticAutoSelect) return
+                                
                                 threadLabel.classList.remove('active-thread-label')
                                 threadLabel.style.color = '#000'
                                 
@@ -1221,7 +1239,7 @@ export function renderTimelineIntervals() {
                             window.activeTMarkerThreadRenderer()
                             
                             const tRows = document.getElementById('transforms-rows')
-                            if (tRows) {
+                            if (tRows && (!e || !e.isSyntheticAutoSelect)) {
                                 const matchedRow = Array.from(tRows.children).find(r => r.dataset.transformKey === tKey)
                                 if (matchedRow) {
                                     const timeBtn = matchedRow.querySelector('#set-transform-interval-btn')
