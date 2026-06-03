@@ -439,6 +439,9 @@ export function renderTimelineIntervals() {
                     }
                     capDyn.innerText = markerTime.toFixed(3) + 's'
                     capDyn.style.left = `calc(${markerPctVal * 100}% + 4px)`
+                    
+                    const hasActiveTMarker = intervalBlock.querySelector('.active-thread-label') !== null
+                    capDyn.style.display = hasActiveTMarker ? 'none' : 'block'
                 }
             }
         }
@@ -453,11 +456,24 @@ export function renderTimelineIntervals() {
         
         const capTooltip = document.getElementById('captions-tooltip')
         if (capTooltip) capTooltip.style.display = 'none'
+        
+        const toggleMultiBtn = document.getElementById('toggle-multi-track-btn')
+        const bottomControls = document.getElementById('bottom-controls')
 
         if (window.isIntervalBlockZoomed) {
             intervalBlock.style.transformOrigin = 'left center'
             intervalBlock.style.transform = 'scaleY(2.5)' // Expands height for marker labels
             intervalBlock.style.zIndex = '100'
+            
+            if (toggleMultiBtn) {
+                toggleMultiBtn.style.transition = 'margin-top 0.2s ease'
+                toggleMultiBtn.style.marginTop = '25px'
+            }
+            
+            if (bottomControls) {
+                bottomControls.style.transition = 'padding-top 0.2s ease'
+                bottomControls.style.paddingTop = '12.5px'
+            }
             
             if (syncWrap && scaleTarget) {
                 syncWrap.style.overflowX = 'auto'
@@ -500,6 +516,16 @@ export function renderTimelineIntervals() {
             intervalBlock.style.transform = 'scale(1)'
             intervalBlock.style.zIndex = ''
             if (ruler) ruler.style.display = 'none'
+            
+            if (toggleMultiBtn) {
+                toggleMultiBtn.style.transition = 'margin-top 0.2s ease'
+                toggleMultiBtn.style.marginTop = '0px'
+            }
+            
+            if (bottomControls) {
+                bottomControls.style.transition = 'padding-top 0.2s ease'
+                bottomControls.style.paddingTop = '0px'
+            }
             
             if (syncWrap && scaleTarget) {
                 syncWrap.scrollLeft = 0
@@ -620,6 +646,19 @@ export function renderTimelineIntervals() {
                 activeObj.node.setAttr('captionColors', captionColors)
             }
 
+            // Immediately tears down any active tmarker selection to unblock the measurement ruler
+            const clearTMarkerSelection = () => {
+                document.querySelectorAll('.tmarker-thread-label.active-thread-label').forEach(lbl => {
+                    lbl.classList.remove('active-thread-label')
+                    lbl.style.color = '#000'
+                })
+                document.querySelectorAll('.tmarker-handle').forEach(m => {
+                    m.style.pointerEvents = 'none'
+                    m.style.cursor = 'default'
+                })
+                window.activeTMarkerThreadRenderer = null
+            }
+
             for (let i = 0; i < capList.length; i++) {
                 const marker = document.createElement('div')
                 marker.style.position = 'absolute'
@@ -636,7 +675,7 @@ export function renderTimelineIntervals() {
                 const markerColor = captionColors[i] || '#ffffff'
                 marker.style.backgroundColor = markerColor
                 marker.style.cursor = 'ew-resize'
-                marker.style.zIndex = '10'
+                marker.style.zIndex = '30'
                 marker.style.pointerEvents = 'auto'
                 
                 // Truncates string and applies native hover hint
@@ -682,6 +721,7 @@ export function renderTimelineIntervals() {
                 
                 marker.onclick = (e) => {
                     e.stopPropagation()
+                    clearTMarkerSelection()
                     activeObj.node.setAttr('activeCaptionEditIndex', i)
                     if (window.isIntervalBlockZoomed) {
                         updateRulerTicks()
@@ -691,6 +731,7 @@ export function renderTimelineIntervals() {
 
                 marker.ondblclick = (e) => {
                     e.stopPropagation()
+                    clearTMarkerSelection()
                     activeObj.node.setAttr('activeCaptionEditIndex', i)
                     
                     const video = document.getElementById('main-video')
@@ -718,6 +759,7 @@ export function renderTimelineIntervals() {
                     e.preventDefault()
                     e.stopPropagation()
                     
+                    clearTMarkerSelection()
                     activeObj.node.setAttr('activeCaptionEditIndex', i)
                     if (window.isIntervalBlockZoomed) {
                         updateRulerTicks()
@@ -830,6 +872,8 @@ export function renderTimelineIntervals() {
                         tmarkerThread.style.transform = 'translateY(-50%)'
                         tmarkerThread.style.zIndex = '5'
                         tmarkerThread.style.pointerEvents = 'auto'
+                        tmarkerThread.style.userSelect = 'none'
+                        tmarkerThread.style.webkitUserSelect = 'none'
                         
                         if (overlaps.has(i)) {
                             tmarkerThread.style.backgroundImage = `repeating-linear-gradient(45deg, ${markerColor}, ${markerColor} 4px, rgba(255, 255, 255, 0.4) 4px, rgba(255, 255, 255, 0.4) 8px)`
@@ -895,7 +939,7 @@ export function renderTimelineIntervals() {
                             
                             // Initializes locked down to enforce thread double-click intent
                             marker.style.cursor = 'default'
-                            marker.style.zIndex = '10'
+                            marker.style.zIndex = '30'
                             marker.style.pointerEvents = 'none'
                             
                             marker.title = `Transform Element ${i + 1} (${isStart ? 'Start' : 'End'}) (double-click to edit transform object)`
@@ -1029,6 +1073,7 @@ export function renderTimelineIntervals() {
                         const eMarker = createInteractiveMarker(false, ePct)
 
                         tmarkerThread.ondblclick = (e) => {
+                            e.preventDefault()
                             e.stopPropagation()
                             
                             if (!window.isIntervalBlockZoomed) {
@@ -1068,6 +1113,8 @@ export function renderTimelineIntervals() {
                                 
                                 const threadTooltip = document.getElementById('tmarker-thread-tooltip')
                                 if (threadTooltip) threadTooltip.innerText = 'double-click to select element'
+                                
+                                ruler.querySelectorAll('.cap-dyn-ruler-val').forEach(el => el.style.display = 'block')
                                 
                                 window.activeTMarkerThreadRenderer = null
                                 return
@@ -1111,6 +1158,8 @@ export function renderTimelineIntervals() {
                             if (oldSDyn) oldSDyn.remove()
                             const oldEDyn = ruler.querySelector('.e-dyn-ruler-val')
                             if (oldEDyn) oldEDyn.remove()
+
+                            ruler.querySelectorAll('.cap-dyn-ruler-val').forEach(el => el.style.display = 'none')
 
                             let cachedRulerRectWidth = null;
 
@@ -1168,7 +1217,20 @@ export function renderTimelineIntervals() {
                                     eDyn.style.left = `calc(${ePctVal * 100}% + 4px)`
                                 }
                             }
+                            
                             window.activeTMarkerThreadRenderer()
+                            
+                            const tRows = document.getElementById('transforms-rows')
+                            if (tRows) {
+                                const matchedRow = Array.from(tRows.children).find(r => r.dataset.transformKey === tKey)
+                                if (matchedRow) {
+                                    const timeBtn = matchedRow.querySelector('#set-transform-interval-btn')
+                                    const timingDiv = matchedRow.querySelector('.transform-interval-timing')
+                                    if (timeBtn && timingDiv && timingDiv.style.display === 'none') {
+                                        timeBtn.click()
+                                    }
+                                }
+                            }
                         }
                     }
                 }

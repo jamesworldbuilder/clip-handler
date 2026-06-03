@@ -25,6 +25,14 @@ export function initMarqueeSystem() {
     window.applyMarquee = (el) => {
         if (!el || !el.isConnected) return
         
+        // Safely aborts animation rendering if the user is actively typing in an input field
+        if (el.tagName === 'INPUT' && document.activeElement === el) {
+            el.getAnimations().forEach(a => a.cancel())
+            el.style.textIndent = '0px'
+            el.style.textOverflow = 'clip'
+            return
+        }
+
         const cWidth = el.clientWidth
         if (cWidth === 0) {
             el.getAnimations().forEach(a => a.cancel())
@@ -43,7 +51,10 @@ export function initMarqueeSystem() {
         const computedStyle = window.getComputedStyle(el)
         span.style.font = computedStyle.font
         span.style.letterSpacing = computedStyle.letterSpacing
-        span.innerText = el.innerText
+        
+        // Evaluates strict value property for inputs vs inner string for standard elements
+        span.innerText = el.tagName === 'INPUT' ? el.value : el.innerText
+        
         document.body.appendChild(span)
         const textWidth = span.clientWidth
         span.remove()
@@ -4350,12 +4361,21 @@ export function initTransformsPanel(node) {
         
         let previousValue = transformKey
         textInput.addEventListener('input', () => syncTransformsFromDOM())
+        textInput.addEventListener('focus', () => {
+            textInput.getAnimations().forEach(a => a.cancel())
+            textInput.style.textIndent = '0px'
+            textInput.style.textOverflow = 'clip'
+        })
         textInput.addEventListener('blur', () => {
             if (textInput.value.trim() === '') textInput.value = previousValue
             else previousValue = textInput.value
             syncTransformsFromDOM()
+            window.applyMarquee(textInput)
         })
         textInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); textInput.blur() } })
+        
+        window.marqueeObserver.observe(textInput)
+        setTimeout(() => window.applyMarquee(textInput), 50)
         
         const timeBtn = document.createElement('button')
         timeBtn.id = 'set-transform-interval-btn'
@@ -4404,17 +4424,6 @@ export function initTransformsPanel(node) {
                     })
                 }
                 
-                // Shifts focus to the first remaining sibling row instantly to preserve the properties container UI
-                if (isActiveRow) {
-                    const rowsContainer = document.getElementById('transforms-rows')
-                    if (rowsContainer) {
-                        const siblings = Array.from(rowsContainer.children).filter(r => r !== row)
-                        if (siblings.length > 0) {
-                            siblings[0].click()
-                        }
-                    }
-                }
-                
                 if (currentObj && currentObjLayer) {
                     // Manually deletes object to bypass aggressive canvas-engine removeObject side-effects (like layer deletion & panel closing)
                     const objIdx = currentObjLayer.objects.findIndex(o => o.id === currentObj.id)
@@ -4440,6 +4449,23 @@ export function initTransformsPanel(node) {
                                     }
                                 })
                             }
+                            
+                            if (isActiveRow || currentObj.node === activeNode) {
+                                let nextActiveNode = null
+                                appLayers.forEach(l => {
+                                    if (l.objects) {
+                                        l.objects.forEach(s => {
+                                            if (s.node && s.node !== currentObj.node && s.node.getAttr('transformGroupName') === tGroup) {
+                                                nextActiveNode = s.node
+                                            }
+                                        })
+                                    }
+                                })
+                                if (nextActiveNode && typeof setActiveNode === 'function') {
+                                    setActiveNode(nextActiveNode)
+                                }
+                            }
+                            
                             currentObj.node.destroy()
                         }
                         currentObjLayer.objects.splice(objIdx, 1)
@@ -4451,13 +4477,24 @@ export function initTransformsPanel(node) {
             row.remove()
             syncTransformsFromDOM()
             
+            // Shifts focus to the first remaining sibling row instantly to preserve the properties container UI
+            if (isActiveRow) {
+                const rowsContainer = document.getElementById('transforms-rows')
+                if (rowsContainer && rowsContainer.children.length > 0) {
+                    rowsContainer.children[0].click()
+                } else {
+                    if (typeof renderLayersUI === 'function') renderLayersUI()
+                    if (typeof renderMultiTrackTimeline === 'function') renderMultiTrackTimeline()
+                }
+            } else {
+                if (typeof renderLayersUI === 'function') renderLayersUI()
+                if (typeof renderMultiTrackTimeline === 'function') renderMultiTrackTimeline()
+            }
+            
             if (siblingRow) {
                 const postRenderGrid = siblingRow.querySelector('.transformations-matrix')
                 if (postRenderGrid) postRenderGrid.scrollTop = cachedOffset
             }
-
-            if (typeof renderLayersUI === 'function') renderLayersUI()
-            if (typeof renderMultiTrackTimeline === 'function') renderMultiTrackTimeline()
         }
         
         // binds both action buttons into a dedicated flex wrapper and narrows the gap to bring them slightly closer together
@@ -4806,23 +4843,40 @@ export function initTransformsPanel(node) {
             }
             
             if (targetNode) {
-                if (targetNode !== activeNode && typeof setActiveNode === 'function') setActiveNode(targetNode)
-                if (typeof transformer !== 'undefined') transformer.nodes([targetNode])
-                
                 const currentIdx = rowIdx - 1
-                targetNode.setAttr('activeTransformEditIndex', currentIdx)
                 
-                if (typeof renderLayersUI === 'function') renderLayersUI()
-                
-                const nClass = targetNode.getClassName()
-                const innerText = typeof targetNode.findOne === 'function' ? targetNode.findOne('.inner-text') : null
-                
-                if ((nClass === 'Group' && innerText) || nClass === 'Text') {
-                    openTextEditor(targetNode)
-                } else if (nClass === 'Filter') {
-                    openFilterEditor(targetNode)
+                if (targetNode !== activeNode) {
+                    if (typeof setActiveNode === 'function') setActiveNode(targetNode)
+                    if (typeof transformer !== 'undefined') transformer.nodes([targetNode])
+                    
+                    targetNode.setAttr('activeTransformEditIndex', currentIdx)
+                    
+                    if (typeof renderLayersUI === 'function') renderLayersUI()
+                    
+                    const nClass = targetNode.getClassName()
+                    const innerText = typeof targetNode.findOne === 'function' ? targetNode.findOne('.inner-text') : null
+                    
+                    if ((nClass === 'Group' && innerText) || nClass === 'Text') {
+                        openTextEditor(targetNode)
+                    } else if (nClass === 'Filter') {
+                        openFilterEditor(targetNode)
+                    } else {
+                        openImageEditor(targetNode)
+                    }
                 } else {
-                    openImageEditor(targetNode)
+                    targetNode.setAttr('activeTransformEditIndex', currentIdx)
+                    const editObjName = document.getElementById('edit-object-name')
+                    if (editObjName) {
+                        const textInput = row.querySelector('.transform-row-container input[type="text"]') || row.querySelector('.panel-input input[type="text"]')
+                        if (textInput) {
+                            if (targetNode.getAttr('captionsGroupName')) {
+                                const capList = targetNode.getAttr('captionsList') || []
+                                editObjName.value = capList.length > currentIdx ? capList[currentIdx] : textInput.value
+                            } else {
+                                editObjName.value = textInput.value
+                            }
+                        }
+                    }
                 }
             }
             
@@ -6370,6 +6424,12 @@ function initCaptionsPanel(node) {
             }
         })
 
+        textInput.addEventListener('focus', () => {
+            textInput.getAnimations().forEach(a => a.cancel())
+            textInput.style.textIndent = '0px'
+            textInput.style.textOverflow = 'clip'
+        })
+
         textInput.addEventListener('blur', () => {
             if (textInput.value.trim() === '') {
                 textInput.value = previousValue
@@ -6377,7 +6437,11 @@ function initCaptionsPanel(node) {
                 previousValue = textInput.value
             }
             syncListFromDOM()
+            window.applyMarquee(textInput)
         })
+        
+        window.marqueeObserver.observe(textInput)
+        setTimeout(() => window.applyMarquee(textInput), 50)
 
         textInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
