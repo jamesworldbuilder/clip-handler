@@ -573,11 +573,15 @@ export function renderTimelineIntervals() {
         if (!window.isIntervalBlockZoomed) {
             document.querySelectorAll('.tmarker-thread-label.active-thread-label').forEach(lbl => {
                 lbl.classList.remove('active-thread-label')
+                lbl.style.opacity = '0.5'
                 lbl.style.color = '#000'
+                lbl.style.backgroundColor = 'transparent'
+                lbl.style.padding = '0'
             })
             document.querySelectorAll('.tmarker-handle').forEach(m => {
                 m.style.pointerEvents = 'none'
                 m.style.cursor = 'default'
+                m.style.top = '0'
             })
             window.activeTMarkerThreadRenderer = null
         }
@@ -594,11 +598,23 @@ export function renderTimelineIntervals() {
         updateCaptionsListColorIndicators()
         
         if ((window.isIntervalBlockZoomed || window._forceTimelineAutoSelect) && activeObj && activeObj.node && activeObj.node.getAttr('transformGroupName')) {
-            const activeEditIdx = activeObj.node.getAttr('activeTransformEditIndex')
-            if (activeEditIdx !== undefined && activeEditIdx !== null) {
+            const tRows = document.getElementById('transforms-rows')
+            let activeRowKey = null
+            let activeMatrixIdx = 0
+            if (tRows) {
+                const activeRow = Array.from(tRows.children).find(r => r.style.borderLeftColor === 'rgb(0, 168, 255)' || r.style.borderLeftColor === '#00a8ff')
+                if (activeRow) {
+                    activeRowKey = activeRow.dataset.transformKey
+                    try {
+                        activeMatrixIdx = JSON.parse(activeRow.dataset.transformConfig).activeTransformEditIndex || 0
+                    } catch(e) {}
+                }
+            }
+            
+            if (activeRowKey) {
                 const threads = intervalBlock.querySelectorAll('.tmarker-thread')
                 threads.forEach(thread => {
-                    if (parseInt(thread.dataset.matrixIndex, 10) === activeEditIdx) {
+                    if (thread.dataset.transformKey === activeRowKey && parseInt(thread.dataset.matrixIndex, 10) === activeMatrixIdx) {
                         if (typeof thread.ondblclick === 'function') {
                             thread.ondblclick({ preventDefault: () => {}, stopPropagation: () => {}, isSyntheticAutoSelect: true })
                         }
@@ -665,11 +681,15 @@ export function renderTimelineIntervals() {
             const clearTMarkerSelection = () => {
                 document.querySelectorAll('.tmarker-thread-label.active-thread-label').forEach(lbl => {
                     lbl.classList.remove('active-thread-label')
+                    lbl.style.opacity = '0.5'
                     lbl.style.color = '#000'
+                    lbl.style.backgroundColor = 'transparent'
+                    lbl.style.padding = '0'
                 })
                 document.querySelectorAll('.tmarker-handle').forEach(m => {
                     m.style.pointerEvents = 'none'
                     m.style.cursor = 'default'
+                    m.style.top = '0'
                 })
                 window.activeTMarkerThreadRenderer = null
             }
@@ -880,6 +900,7 @@ export function renderTimelineIntervals() {
                         const tmarkerThread = document.createElement('div')
                         tmarkerThread.className = 'tmarker-thread'
                         tmarkerThread.dataset.matrixIndex = i
+                        tmarkerThread.dataset.transformKey = tKey
                         tmarkerThread.style.position = 'absolute'
                         tmarkerThread.style.left = `${sPct * 100}%`
                         tmarkerThread.style.width = `${(ePct - sPct) * 100}%`
@@ -1112,12 +1133,17 @@ export function renderTimelineIntervals() {
                                 if (e && e.isSyntheticAutoSelect) return
                                 
                                 threadLabel.classList.remove('active-thread-label')
+                                threadLabel.style.opacity = '0.5'
                                 threadLabel.style.color = '#000'
+                                threadLabel.style.backgroundColor = 'transparent'
+                                threadLabel.style.padding = '0'
                                 
                                 sMarker.style.pointerEvents = 'none'
                                 sMarker.style.cursor = 'default'
+                                sMarker.style.top = '0'
                                 eMarker.style.pointerEvents = 'none'
                                 eMarker.style.cursor = 'default'
+                                eMarker.style.top = '0'
                                 
                                 ruler.querySelectorAll('span').forEach(span => {
                                     span.style.color = '#aaa'
@@ -1142,11 +1168,14 @@ export function renderTimelineIntervals() {
                             document.querySelectorAll('.tmarker-handle').forEach(m => {
                                 m.style.pointerEvents = 'none'
                                 m.style.cursor = 'default'
+                                m.style.top = '0'
                             })
                             sMarker.style.pointerEvents = 'auto'
                             sMarker.style.cursor = 'ew-resize'
+                            sMarker.style.top = '-10px'
                             eMarker.style.pointerEvents = 'auto'
                             eMarker.style.cursor = 'ew-resize'
+                            eMarker.style.top = '-10px'
 
                             // Highlight this thread label, reset others
                             document.querySelectorAll('.tmarker-thread-label').forEach(lbl => {
@@ -1163,10 +1192,10 @@ export function renderTimelineIntervals() {
                             threadLabel.classList.add('active-thread-label')
                             threadLabel.style.opacity = '1'
                             threadLabel.style.color = '#000'
-                            threadLabel.style.backgroundColor = 'transparent'
+                            threadLabel.style.backgroundColor = '#ffffff'
                             threadLabel.style.textShadow = 'none'
-                            threadLabel.style.padding = '0'
-                            threadLabel.style.borderRadius = '0'
+                            threadLabel.style.padding = '1px 3px'
+                            threadLabel.style.borderRadius = '2px'
                             threadLabel.style.fontSize = '8px'
                             
                             const threadTooltip = document.getElementById('tmarker-thread-tooltip')

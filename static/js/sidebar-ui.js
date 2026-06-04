@@ -4603,6 +4603,10 @@ export function initTransformsPanel(node) {
                     if (tRow) {
                         tRow.dataset.transformConfig = JSON.stringify(configData)
                         
+                        if (typeof syncTransformsFromDOM === 'function') {
+                            syncTransformsFromDOM()
+                        }
+                        
                         const timingDiv = tRow.querySelector('.transform-interval-timing')
                         if (timingDiv) {
                             const activeTConfig = configData.transformGroupData[i] || {}
@@ -4632,16 +4636,15 @@ export function initTransformsPanel(node) {
                     const newGrid = matrixDiv.querySelector('.transformations-matrix')
                     if (newGrid) newGrid.scrollTop = priorScroll
                     if (layersTab) layersTab.scrollTop = cachedParentScroll
+                    
+                    window._forceTimelineAutoSelect = true
+                    
                     if (tRow) {
                         window._matrixScrollPreserve = priorScroll
                         tRow.click()
                         delete window._matrixScrollPreserve
                     }
                     if (layersTab) layersTab.scrollTop = cachedParentScroll
-                    
-                    window._forceTimelineAutoSelect = true
-                    if (typeof renderTimelineIntervals === 'function') renderTimelineIntervals()
-                    if (typeof renderMultiTrackTimeline === 'function') renderMultiTrackTimeline()
                 }
                 gridScrollArea.appendChild(matrixBtn)
             }
@@ -4719,6 +4722,8 @@ export function initTransformsPanel(node) {
                     tRow.dataset.transformConfig = JSON.stringify(configData)
                 }
                 
+                window._forceTimelineAutoSelect = true
+                
                 // forces element array map interface loop rendering update cycle without jumping
                 renderMatrixGrid()
                 
@@ -4726,7 +4731,6 @@ export function initTransformsPanel(node) {
                     syncTransformsFromDOM()
                 }
                 
-                window._forceTimelineAutoSelect = true
                 if (typeof renderTimelineIntervals === 'function') renderTimelineIntervals()
                 if (typeof renderMultiTrackTimeline === 'function') renderMultiTrackTimeline()
                 
