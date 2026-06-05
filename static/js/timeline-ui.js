@@ -573,16 +573,21 @@ export function renderTimelineIntervals() {
         if (!window.isIntervalBlockZoomed) {
             document.querySelectorAll('.tmarker-thread-label.active-thread-label').forEach(lbl => {
                 lbl.classList.remove('active-thread-label')
-                lbl.style.opacity = '0.5'
+                lbl.style.opacity = '0.8'
                 lbl.style.color = '#000'
-                lbl.style.backgroundColor = 'transparent'
-                lbl.style.padding = '0'
+                lbl.style.backgroundColor = 'rgba(255,255,255,0.7)'
+                lbl.style.padding = '0 2px'
+            })
+            document.querySelectorAll('.tmarker-arrow').forEach(arr => {
+                if (arr.style.borderLeftColor) arr.style.borderLeftColor = '#000'
+                if (arr.style.borderRightColor) arr.style.borderRightColor = '#000'
             })
             document.querySelectorAll('.tmarker-handle').forEach(m => {
                 m.style.pointerEvents = 'none'
                 m.style.cursor = 'default'
                 m.style.top = '0'
             })
+            document.querySelectorAll('.s-dyn-ruler-val, .e-dyn-ruler-val').forEach(el => el.remove())
             window.activeTMarkerThreadRenderer = null
         }
         
@@ -681,10 +686,14 @@ export function renderTimelineIntervals() {
             const clearTMarkerSelection = () => {
                 document.querySelectorAll('.tmarker-thread-label.active-thread-label').forEach(lbl => {
                     lbl.classList.remove('active-thread-label')
-                    lbl.style.opacity = '0.5'
+                    lbl.style.opacity = '0.8'
                     lbl.style.color = '#000'
-                    lbl.style.backgroundColor = 'transparent'
-                    lbl.style.padding = '0'
+                    lbl.style.backgroundColor = 'rgba(255,255,255,0.7)'
+                    lbl.style.padding = '0 2px'
+                })
+                document.querySelectorAll('.tmarker-arrow').forEach(arr => {
+                    if (arr.style.borderLeftColor) arr.style.borderLeftColor = '#000'
+                    if (arr.style.borderRightColor) arr.style.borderRightColor = '#000'
                 })
                 document.querySelectorAll('.tmarker-handle').forEach(m => {
                     m.style.pointerEvents = 'none'
@@ -862,7 +871,6 @@ export function renderTimelineIntervals() {
                 if (tConfig && tConfig.transformGroupData) {
                     const matrixKeys = Object.keys(tConfig.transformGroupData)
                     
-                    const intervals = []
                     for (let i = 0; i < matrixKeys.length; i++) {
                         const mKey = matrixKeys[i]
                         const tEl = tConfig.transformGroupData[mKey]
@@ -871,19 +879,48 @@ export function renderTimelineIntervals() {
                         if (!tEl.transform_interval) {
                             tEl.transform_interval = tEl.interval ? { ...tEl.interval } : { start: "0.050s", end: "0.250s" }
                         }
-                        const tInv = tEl.transform_interval
-                        intervals.push({ start: parseFloat(tInv.start), end: parseFloat(tInv.end), id: i })
                     }
                     
-                    const overlaps = new Set()
-                    for (let i = 0; i < intervals.length; i++) {
-                        for (let j = i + 1; j < intervals.length; j++) {
-                            if (intervals[i].start < intervals[j].end && intervals[i].end > intervals[j].start) {
-                                overlaps.add(intervals[i].id)
-                                overlaps.add(intervals[j].id)
+                    const overlapsContainer = document.createElement('div')
+                    overlapsContainer.style.cssText = 'position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:6;'
+                    intervalBlock.appendChild(overlapsContainer)
+                    
+                    const renderOverlaps = () => {
+                        overlapsContainer.innerHTML = ''
+                        const currentIntervals = []
+                        matrixKeys.forEach(mKey => {
+                            const tEl = tConfig.transformGroupData[mKey]
+                            if (tEl && tEl.transform_interval) {
+                                currentIntervals.push({
+                                    start: parseFloat(tEl.transform_interval.start),
+                                    end: parseFloat(tEl.transform_interval.end)
+                                })
+                            }
+                        })
+                        
+                        for (let i = 0; i < currentIntervals.length; i++) {
+                            for (let j = i + 1; j < currentIntervals.length; j++) {
+                                const start = Math.max(currentIntervals[i].start, currentIntervals[j].start)
+                                const end = Math.min(currentIntervals[i].end, currentIntervals[j].end)
+                                if (start < end) {
+                                    const sPct = (start - activeObj.startTime) / (activeObj.endTime - activeObj.startTime)
+                                    const ePct = (end - activeObj.startTime) / (activeObj.endTime - activeObj.startTime)
+                                    
+                                    const overlapDiv = document.createElement('div')
+                                    overlapDiv.style.position = 'absolute'
+                                    overlapDiv.style.left = `${sPct * 100}%`
+                                    overlapDiv.style.width = `${(ePct - sPct) * 100}%`
+                                    overlapDiv.style.height = '4px'
+                                    overlapDiv.style.top = '50%'
+                                    overlapDiv.style.transform = 'translateY(-50%)'
+                                    overlapDiv.style.backgroundImage = 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0, 0, 0, 0.4) 2px, rgba(0, 0, 0, 0.4) 4px), repeating-linear-gradient(-45deg, transparent, transparent 2px, rgba(0, 0, 0, 0.4) 2px, rgba(0, 0, 0, 0.4) 4px)'
+                                    overlapDiv.style.backgroundColor = 'rgba(255, 255, 255, 0.4)'
+                                    overlapsContainer.appendChild(overlapDiv)
+                                }
                             }
                         }
                     }
+                    renderOverlaps()
 
                     for (let i = 0; i < matrixKeys.length; i++) {
                         const matrixKey = matrixKeys[i]
@@ -904,20 +941,17 @@ export function renderTimelineIntervals() {
                         tmarkerThread.style.position = 'absolute'
                         tmarkerThread.style.left = `${sPct * 100}%`
                         tmarkerThread.style.width = `${(ePct - sPct) * 100}%`
-                        tmarkerThread.style.height = '4px'
-                        tmarkerThread.style.top = '50%'
-                        tmarkerThread.style.transform = 'translateY(-50%)'
-                        tmarkerThread.style.zIndex = '5'
+                        tmarkerThread.style.height = '6px'
+                        tmarkerThread.style.top = '3px'
+                        tmarkerThread.style.zIndex = '15'
                         tmarkerThread.style.pointerEvents = 'auto'
+                        tmarkerThread.style.cursor = 'pointer'
                         tmarkerThread.style.userSelect = 'none'
                         tmarkerThread.style.webkitUserSelect = 'none'
                         
-                        if (overlaps.has(i)) {
-                            tmarkerThread.style.backgroundImage = `repeating-linear-gradient(45deg, ${markerColor}, ${markerColor} 4px, rgba(255, 255, 255, 0.4) 4px, rgba(255, 255, 255, 0.4) 8px)`
-                            tmarkerThread.style.backgroundColor = 'transparent'
-                        } else {
-                            tmarkerThread.style.backgroundColor = markerColor
-                        }
+                        tmarkerThread.style.backgroundColor = markerColor
+                        tmarkerThread.style.backgroundImage = 'none'
+                        tmarkerThread.style.setProperty('opacity', '1', 'important')
                         
                         tmarkerThread.style.display = 'flex'
                         tmarkerThread.style.alignItems = 'center'
@@ -927,7 +961,7 @@ export function renderTimelineIntervals() {
                         threadLabel.className = 'tmarker-thread-label'
                         threadLabel.innerText = (i + 1).toString()
                         const counterScale = window.isIntervalBlockZoomed ? 0.4 : 1
-                        threadLabel.style.cssText = `color: #000; font-size: 8px; font-weight: bold; font-family: monospace; pointer-events: none; user-select: none; opacity: 0.5; transition: all 0.2s; transform: scaleY(${counterScale}); display: ${window.isIntervalBlockZoomed ? 'block' : 'none'};`
+                        threadLabel.style.cssText = `position: relative; z-index: 7; color: #000; font-size: 8px; font-weight: bold; font-family: monospace; pointer-events: none; user-select: none; opacity: 0.8; background-color: rgba(255,255,255,0.7); padding: 0 2px; border-radius: 2px; transition: all 0.2s; transform: scaleY(${counterScale}); display: ${window.isIntervalBlockZoomed ? 'block' : 'none'};`
                         tmarkerThread.appendChild(threadLabel)
 
                         tmarkerThread.addEventListener('mousemove', (e) => {
@@ -962,6 +996,9 @@ export function renderTimelineIntervals() {
                         const createInteractiveMarker = (isStart, currentPct) => {
                             const marker = document.createElement('div')
                             marker.className = 'tmarker-handle'
+                            marker.dataset.isStart = isStart
+                            marker.dataset.matrixIndex = i
+                            marker.dataset.transformKey = tKey
                             marker.style.position = 'absolute'
                             const markerPct = currentPct * 100
                             marker.style.left = `${markerPct}%`
@@ -973,6 +1010,25 @@ export function renderTimelineIntervals() {
                             marker.style.backgroundClip = 'content-box'
                             marker.style.transform = 'translateX(-50%)'
                             marker.style.backgroundColor = markerColor
+                            
+                            const arrow = document.createElement('div')
+                            arrow.className = 'tmarker-arrow'
+                            arrow.style.position = 'absolute'
+                            arrow.style.top = '50%'
+                            arrow.style.transform = 'translateY(-50%)'
+                            arrow.style.width = '0'
+                            arrow.style.height = '0'
+                            arrow.style.borderTop = '2px solid transparent'
+                            arrow.style.borderBottom = '2px solid transparent'
+                            
+                            if (isStart) {
+                                arrow.style.left = '7px'
+                                arrow.style.borderLeft = '3px solid #000'
+                            } else {
+                                arrow.style.right = '7px'
+                                arrow.style.borderRight = '3px solid #000'
+                            }
+                            marker.appendChild(arrow)
                             
                             // Initializes locked down to enforce thread double-click intent
                             marker.style.cursor = 'default'
@@ -994,6 +1050,7 @@ export function renderTimelineIntervals() {
                                         row.click()
                                     }
                                 }
+                                tmarkerThread.ondblclick(e)
                             }
                             
                             marker.onmousedown = (e) => {
@@ -1052,6 +1109,7 @@ export function renderTimelineIntervals() {
                                     
                                     // Invokes rendering engine to update marker labels in real-time
                                     if (window.activeTMarkerThreadRenderer) window.activeTMarkerThreadRenderer()
+                                    renderOverlaps()
                                     
                                     if (cachedSidebarGroup) {
                                         const p = getTimeParts(isStart ? parseFloat(tInterval.start) : parseFloat(tInterval.end))
@@ -1133,27 +1191,29 @@ export function renderTimelineIntervals() {
                                 if (e && e.isSyntheticAutoSelect) return
                                 
                                 threadLabel.classList.remove('active-thread-label')
-                                threadLabel.style.opacity = '0.5'
+                                threadLabel.style.opacity = '0.8'
                                 threadLabel.style.color = '#000'
-                                threadLabel.style.backgroundColor = 'transparent'
-                                threadLabel.style.padding = '0'
+                                threadLabel.style.backgroundColor = 'rgba(255,255,255,0.7)'
+                                threadLabel.style.padding = '0 2px'
                                 
                                 sMarker.style.pointerEvents = 'none'
                                 sMarker.style.cursor = 'default'
                                 sMarker.style.top = '0'
+                                const sArrow = sMarker.querySelector('.tmarker-arrow')
+                                if (sArrow) sArrow.style.borderLeftColor = '#000'
+                                
                                 eMarker.style.pointerEvents = 'none'
                                 eMarker.style.cursor = 'default'
                                 eMarker.style.top = '0'
+                                const eArrow = eMarker.querySelector('.tmarker-arrow')
+                                if (eArrow) eArrow.style.borderRightColor = '#000'
                                 
                                 ruler.querySelectorAll('span').forEach(span => {
                                     span.style.color = '#aaa'
                                     span.style.opacity = '1'
                                 })
                                 
-                                const sDyn = ruler.querySelector('.s-dyn-ruler-val')
-                                if (sDyn) sDyn.remove()
-                                const eDyn = ruler.querySelector('.e-dyn-ruler-val')
-                                if (eDyn) eDyn.remove()
+                                ruler.querySelectorAll('.s-dyn-ruler-val, .e-dyn-ruler-val').forEach(el => el.remove())
                                 
                                 const threadTooltip = document.getElementById('tmarker-thread-tooltip')
                                 if (threadTooltip) threadTooltip.innerText = 'double-click to select element'
@@ -1180,13 +1240,18 @@ export function renderTimelineIntervals() {
                             // Highlight this thread label, reset others
                             document.querySelectorAll('.tmarker-thread-label').forEach(lbl => {
                                 lbl.classList.remove('active-thread-label')
-                                lbl.style.opacity = '0.5'
+                                lbl.style.opacity = '0.8'
                                 lbl.style.color = '#000'
                                 lbl.style.textShadow = 'none'
-                                lbl.style.backgroundColor = 'transparent'
-                                lbl.style.padding = '0'
-                                lbl.style.borderRadius = '0'
+                                lbl.style.backgroundColor = 'rgba(255,255,255,0.7)'
+                                lbl.style.padding = '0 2px'
+                                lbl.style.borderRadius = '2px'
                                 lbl.style.fontSize = '8px'
+                            })
+                            
+                            document.querySelectorAll('.tmarker-arrow').forEach(arr => {
+                                if (arr.style.borderLeftColor) arr.style.borderLeftColor = '#000'
+                                if (arr.style.borderRightColor) arr.style.borderRightColor = '#000'
                             })
                             
                             threadLabel.classList.add('active-thread-label')
@@ -1198,13 +1263,15 @@ export function renderTimelineIntervals() {
                             threadLabel.style.borderRadius = '2px'
                             threadLabel.style.fontSize = '8px'
                             
+                            const sArrowAct = sMarker.querySelector('.tmarker-arrow')
+                            if (sArrowAct) sArrowAct.style.borderLeftColor = '#ffffff'
+                            const eArrowAct = eMarker.querySelector('.tmarker-arrow')
+                            if (eArrowAct) eArrowAct.style.borderRightColor = '#ffffff'
+                            
                             const threadTooltip = document.getElementById('tmarker-thread-tooltip')
                             if (threadTooltip) threadTooltip.innerText = 'double-click to de-select element'
                             
-                            const oldSDyn = ruler.querySelector('.s-dyn-ruler-val')
-                            if (oldSDyn) oldSDyn.remove()
-                            const oldEDyn = ruler.querySelector('.e-dyn-ruler-val')
-                            if (oldEDyn) oldEDyn.remove()
+                            ruler.querySelectorAll('.s-dyn-ruler-val, .e-dyn-ruler-val').forEach(el => el.remove())
 
                             ruler.querySelectorAll('.cap-dyn-ruler-val').forEach(el => el.style.display = 'none')
 
@@ -1271,10 +1338,15 @@ export function renderTimelineIntervals() {
                             if (tRows && (!e || !e.isSyntheticAutoSelect)) {
                                 const matchedRow = Array.from(tRows.children).find(r => r.dataset.transformKey === tKey)
                                 if (matchedRow) {
-                                    const timeBtn = matchedRow.querySelector('#set-transform-interval-btn')
-                                    const timingDiv = matchedRow.querySelector('.transform-interval-timing')
-                                    if (timeBtn && timingDiv && timingDiv.style.display === 'none') {
-                                        timeBtn.click()
+                                    const mIdx = parseInt(tmarkerThread.dataset.matrixIndex, 10)
+                                    const matrixBtn = matchedRow.querySelector(`.transform-element-${mIdx + 1}`)
+                                    if (matrixBtn) {
+                                        let needsClick = true
+                                        try {
+                                            const cfg = JSON.parse(matchedRow.dataset.transformConfig)
+                                            if (cfg.activeTransformEditIndex === mIdx) needsClick = false
+                                        } catch(err) {}
+                                        if (needsClick) matrixBtn.click()
                                     }
                                 }
                             }
@@ -1327,6 +1399,10 @@ export function renderTimelineIntervals() {
     let initialStart = 0
     let initialEnd = 0
     let duration = 0
+    let minAllowedStart = 0
+    let maxAllowedStart = Infinity
+    let minAllowedEnd = 0
+    let maxAllowedEnd = Infinity
 
     const onMouseDown = (mode) => (e) => {
         // Prevents native browser ghost dragging
@@ -1338,6 +1414,35 @@ export function renderTimelineIntervals() {
         initialStart = activeObj.startTime
         initialEnd = activeObj.endTime
         duration = activeObj.endTime - activeObj.startTime
+        
+        minAllowedStart = 0
+        maxAllowedStart = initialEnd - 0.3
+        minAllowedEnd = initialStart + 0.3
+        
+        const video = document.getElementById('main-video')
+        maxAllowedEnd = video && video.duration ? video.duration : Infinity
+        
+        if (activeObj.node && activeObj.node.getAttr('transformGroupName')) {
+            const tGroupData = activeObj.node.getAttr('transformGroupData')
+            if (tGroupData) {
+                let earliestStart = Infinity
+                let latestEnd = -Infinity
+                Object.keys(tGroupData).forEach(tKey => {
+                    const cfg = tGroupData[tKey]
+                    if (cfg && cfg.transformGroupData) {
+                        Object.keys(cfg.transformGroupData).forEach(mKey => {
+                            const tInv = cfg.transformGroupData[mKey].transform_interval
+                            if (tInv) {
+                                if (tInv.start !== undefined) earliestStart = Math.min(earliestStart, parseFloat(tInv.start))
+                                if (tInv.end !== undefined) latestEnd = Math.max(latestEnd, parseFloat(tInv.end))
+                            }
+                        })
+                    }
+                })
+                if (earliestStart !== Infinity) maxAllowedStart = Math.min(maxAllowedStart, earliestStart)
+                if (latestEnd !== -Infinity) minAllowedEnd = Math.max(minAllowedEnd, latestEnd)
+            }
+        }
         
         // Prevents text highlighting across the page while dragging the interval block
         document.body.style.userSelect = 'none'
@@ -1440,12 +1545,12 @@ export function renderTimelineIntervals() {
             }
         } else if (dragMode === 'start') {
             newStart = initialStart + deltaTime
-            if (newStart < 0) newStart = 0
-            if (newStart > activeObj.endTime - 0.3) newStart = activeObj.endTime - 0.3
+            if (newStart < minAllowedStart) newStart = minAllowedStart
+            if (newStart > maxAllowedStart) newStart = maxAllowedStart
         } else if (dragMode === 'end') {
             newEnd = initialEnd + deltaTime
-            if (newEnd > video.duration) newEnd = video.duration
-            if (newEnd < activeObj.startTime + 0.3) newEnd = activeObj.startTime + 0.3
+            if (newEnd < minAllowedEnd) newEnd = minAllowedEnd
+            if (newEnd > maxAllowedEnd) newEnd = maxAllowedEnd
         }
 
         activeObj.startTime = newStart
@@ -1456,6 +1561,39 @@ export function renderTimelineIntervals() {
         
         intervalBlock.style.left = startPct + '%'
         intervalBlock.style.width = widthPct + '%'
+
+        // dynamically recalculates absolute time percentages for transform markers to prevent visual stretching
+        intervalBlock.querySelectorAll('.tmarker-thread').forEach(thread => {
+            const mIdx = thread.dataset.matrixIndex
+            const tKey = thread.dataset.transformKey
+            const tGroupData = activeObj.node.getAttr('transformGroupData')
+            if (tGroupData && tGroupData[tKey] && tGroupData[tKey].transformGroupData && tGroupData[tKey].transformGroupData[mIdx]) {
+                const tEl = tGroupData[tKey].transformGroupData[mIdx]
+                const tInv = tEl.transform_interval
+                if (tInv) {
+                    const sPctVal = (parseFloat(tInv.start) - newStart) / (newEnd - newStart)
+                    const ePctVal = (parseFloat(tInv.end) - newStart) / (newEnd - newStart)
+                    thread.style.left = `${sPctVal * 100}%`
+                    thread.style.width = `${(ePctVal - sPctVal) * 100}%`
+                }
+            }
+        })
+        
+        intervalBlock.querySelectorAll('.tmarker-handle').forEach(marker => {
+            const mIdx = marker.dataset.matrixIndex
+            const tKey = marker.dataset.transformKey
+            const isStart = marker.dataset.isStart === 'true'
+            const tGroupData = activeObj.node.getAttr('transformGroupData')
+            if (tGroupData && tGroupData[tKey] && tGroupData[tKey].transformGroupData && tGroupData[tKey].transformGroupData[mIdx]) {
+                const tEl = tGroupData[tKey].transformGroupData[mIdx]
+                const tInv = tEl.transform_interval
+                if (tInv) {
+                    const timeVal = isStart ? parseFloat(tInv.start) : parseFloat(tInv.end)
+                    const pctVal = (timeVal - newStart) / (newEnd - newStart)
+                    marker.style.left = `${pctVal * 100}%`
+                }
+            }
+        })
         
         // dynamically synchronizes equivalent multi-track block dimensions
         const multiBlock = document.getElementById(`multi-track-block-${activeObj.id}`)
@@ -1515,7 +1653,7 @@ export function renderTimelineIntervals() {
         
         document.removeEventListener('mousemove', onCursorDrag)
         document.removeEventListener('mouseup', onCursorDrop)
-        
+
         if (droppedMode === 'end') {
             // clears existing timeout to prevent overlapping executions
             if (window.endTimePreviewTimeout) clearTimeout(window.endTimePreviewTimeout)
@@ -1969,6 +2107,114 @@ export function initTimelineBindings() {
             renderTimelineIntervals()
         }
     })
+
+    // natively intercepts video playback to dynamically apply transform interval states in real-time
+    if (!window._transformPlaybackLoopBound) {
+        window._transformPlaybackLoopBound = true
+        
+        let lastAppliedTime = -1
+        
+        const transformAnimationLoop = () => {
+            const video = document.getElementById('main-video')
+            if (video && video.currentTime !== lastAppliedTime) {
+                lastAppliedTime = video.currentTime
+                const currentTime = video.currentTime
+                let layerRedrawNeeded = false
+                
+                if (typeof appLayers !== 'undefined') {
+                    appLayers.forEach(layer => {
+                        if (!layer.objects) return
+                        layer.objects.forEach(obj => {
+                            const node = obj.node
+                            if (!node) return
+                            const tGroupData = node.getAttr('transformGroupData')
+                            if (!tGroupData) return
+                            
+                            Object.keys(tGroupData).forEach(tKey => {
+                                const cfg = tGroupData[tKey]
+                                if (!cfg || !cfg.transformGroupData) return
+                                
+                                let activeElement = null
+                                Object.keys(cfg.transformGroupData).forEach(mKey => {
+                                    const tEl = cfg.transformGroupData[mKey]
+                                    const tInv = tEl.transform_interval
+                                    if (tInv) {
+                                        const start = parseFloat(tInv.start)
+                                        const end = parseFloat(tInv.end)
+                                        if (currentTime >= start && currentTime <= end) {
+                                            activeElement = tEl
+                                        }
+                                    }
+                                })
+                                
+                                if (activeElement) {
+                                    const blocking = activeElement.Blocking || cfg.Blocking
+                                    const styling = activeElement.Styling || cfg.Styling
+                                    
+                                    if (blocking) {
+                                        node.x(blocking.x)
+                                        node.y(blocking.y)
+                                        node.width(blocking.width)
+                                        node.height(blocking.height)
+                                        node.scaleX(blocking.scaleX)
+                                        node.scaleY(blocking.scaleY)
+                                        node.rotation(blocking.rotation)
+                                        node.offsetX(blocking.offsetX)
+                                        node.offsetY(blocking.offsetY)
+                                    }
+                                    
+                                    if (styling) {
+                                        node.opacity(styling.opacity !== undefined ? styling.opacity : 1)
+                                        const innerText = typeof node.findOne === 'function' ? node.findOne('.inner-text') : null
+                                        if (innerText && styling.Text) {
+                                            innerText.fontFamily(styling.Text.fontFamily)
+                                            innerText.fontSize(styling.Text.fontSize)
+                                            innerText.fontStyle(styling.Text.fontStyle)
+                                            innerText.align(styling.Text.align)
+                                            innerText.fill(styling.Text.fill)
+                                            innerText.stroke(styling.Text.stroke || 'transparent')
+                                            innerText.strokeWidth(styling.Text.strokeWidth || 0)
+                                        } else if (styling.Shape) {
+                                            if (node.fill) node.fill(styling.Shape.fill)
+                                        }
+                                        
+                                        if (styling.Border && !innerText) {
+                                            if (node.stroke) node.stroke(styling.Border.color)
+                                            if (node.strokeWidth) node.strokeWidth(styling.Border.thickness)
+                                            if (node.dash) node.dash(styling.Border.dash || [])
+                                        } else if (!innerText) {
+                                            if (node.stroke) node.stroke('transparent')
+                                        }
+                                        
+                                        const shadowTarget = innerText || node
+                                        if (styling.Shadow) {
+                                            shadowTarget.shadowColor(styling.Shadow.color)
+                                            shadowTarget.shadowBlur(styling.Shadow.blur)
+                                            shadowTarget.shadowOffsetX(styling.Shadow.offsetX)
+                                            shadowTarget.shadowOffsetY(styling.Shadow.offsetY)
+                                            shadowTarget.shadowOpacity(styling.Shadow.opacity)
+                                        } else {
+                                            shadowTarget.shadowOpacity(0)
+                                        }
+                                    }
+                                    layerRedrawNeeded = true
+                                }
+                            })
+                        })
+                    })
+                    
+                    if (layerRedrawNeeded) {
+                        if (typeof transformer !== 'undefined' && transformer) transformer.forceUpdate()
+                        appLayers.forEach(l => {
+                            if (l.konvaLayer) l.konvaLayer.batchDraw()
+                        })
+                    }
+                }
+            }
+            requestAnimationFrame(transformAnimationLoop)
+        }
+        requestAnimationFrame(transformAnimationLoop)
+    }
 
     // toggles visibility of the multi-track timeline container
     const toggleMultiBtn = document.getElementById('toggle-multi-track-btn')

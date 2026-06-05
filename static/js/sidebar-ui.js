@@ -3957,6 +3957,43 @@ export function initTransformsPanel(node) {
     
     if (!panel || !initState) return
 
+    // persistently captures all node style edits and securely writes them directly to the active transform index memory state
+    const saveCurrentTransformState = () => {
+        if (typeof activeNode === 'undefined' || !activeNode) return
+        const tGroup = activeNode.getAttr('transformGroupName')
+        if (!tGroup) return
+        const rowsContainer = document.getElementById('transforms-rows')
+        if (!rowsContainer) return
+        const activeRow = Array.from(rowsContainer.children).find(r => r.style.borderLeftColor === 'rgb(0, 168, 255)' || r.style.borderLeftColor === '#00a8ff')
+        if (!activeRow) return
+        
+        let cfg
+        try { cfg = JSON.parse(activeRow.dataset.transformConfig) } catch(e) { return }
+        
+        const activeIdx = cfg.activeTransformEditIndex || 0
+        if (!cfg.transformGroupData) cfg.transformGroupData = {}
+        if (!cfg.transformGroupData[activeIdx]) cfg.transformGroupData[activeIdx] = {}
+        
+        const currentObjConfig = buildTransformConfig(activeNode)
+        cfg.transformGroupData[activeIdx].Blocking = currentObjConfig.Blocking
+        cfg.transformGroupData[activeIdx].Styling = currentObjConfig.Styling
+        
+        activeRow.dataset.transformConfig = JSON.stringify(cfg)
+        
+        let tData = activeNode.getAttr('transformGroupData') || {}
+        tData[activeRow.dataset.transformKey] = cfg
+        activeNode.setAttr('transformGroupData', tData)
+        
+        if (window.updateAdvancedConfigDisplay) window.updateAdvancedConfigDisplay()
+    }
+    
+    if (!window._transformAutoSaveBound) {
+        window._transformAutoSaveBound = true
+        document.addEventListener('mouseup', () => setTimeout(saveCurrentTransformState, 100))
+        document.addEventListener('keyup', () => setTimeout(saveCurrentTransformState, 100))
+        document.addEventListener('change', () => setTimeout(saveCurrentTransformState, 100))
+    }
+
     panel.style.display = 'none'
     initState.style.display = 'flex'
     listContainer.style.display = 'none'
@@ -4178,6 +4215,70 @@ export function initTransformsPanel(node) {
                 
                 if (typeof renderLayersUI === 'function') renderLayersUI()
                 
+                const video = document.getElementById('main-video')
+                const activeIdx = configData.activeTransformEditIndex || 0
+                const activeEl = configData.transformGroupData && configData.transformGroupData[activeIdx] ? configData.transformGroupData[activeIdx] : {}
+                const jumpTarget = activeEl.transform_interval && activeEl.transform_interval.start !== undefined ? parseFloat(activeEl.transform_interval.start) : (configData.interval ? configData.interval.start : 0)
+
+                if (video && jumpTarget !== undefined) {
+                    video.currentTime = jumpTarget
+                    const scrubber = document.getElementById('timeline-scrubber')
+                    const progress = document.getElementById('scrubber-progress')
+                    if (scrubber && progress && video.duration) {
+                        scrubber.value = jumpTarget
+                        progress.style.width = (jumpTarget / video.duration) * 100 + '%'
+                    }
+                }
+
+                const blocking = activeEl.Blocking || configData.Blocking
+                const styling = activeEl.Styling || configData.Styling
+
+                targetNode.x(blocking.x)
+                targetNode.y(blocking.y)
+                targetNode.width(blocking.width)
+                targetNode.height(blocking.height)
+                targetNode.scaleX(blocking.scaleX)
+                targetNode.scaleY(blocking.scaleY)
+                targetNode.rotation(blocking.rotation)
+                targetNode.offsetX(blocking.offsetX)
+                targetNode.offsetY(blocking.offsetY)
+                targetNode.opacity(styling.opacity !== undefined ? styling.opacity : 1)
+                
+                const innerText = typeof targetNode.findOne === 'function' ? targetNode.findOne('.inner-text') : null
+                if (innerText && styling.Text) {
+                    innerText.fontFamily(styling.Text.fontFamily)
+                    innerText.fontSize(styling.Text.fontSize)
+                    innerText.fontStyle(styling.Text.fontStyle)
+                    innerText.align(styling.Text.align)
+                    innerText.fill(styling.Text.fill)
+                    innerText.stroke(styling.Text.stroke || 'transparent')
+                    innerText.strokeWidth(styling.Text.strokeWidth || 0)
+                } else if (styling.Shape) {
+                    if (targetNode.fill) targetNode.fill(styling.Shape.fill)
+                }
+                
+                if (styling.Border && !innerText) {
+                    if (targetNode.stroke) targetNode.stroke(styling.Border.color)
+                    if (targetNode.strokeWidth) targetNode.strokeWidth(styling.Border.thickness)
+                    if (targetNode.dash) targetNode.dash(styling.Border.dash || [])
+                } else if (!innerText) {
+                    if (targetNode.stroke) targetNode.stroke('transparent')
+                }
+                
+                const shadowTarget = innerText || targetNode
+                if (styling.Shadow) {
+                    shadowTarget.shadowColor(styling.Shadow.color)
+                    shadowTarget.shadowBlur(styling.Shadow.blur)
+                    shadowTarget.shadowOffsetX(styling.Shadow.offsetX)
+                    shadowTarget.shadowOffsetY(styling.Shadow.offsetY)
+                    shadowTarget.shadowOpacity(styling.Shadow.opacity)
+                } else {
+                    shadowTarget.shadowOpacity(0)
+                }
+
+                if (targetNode.getLayer()) targetNode.getLayer().batchDraw()
+                if (typeof transformer !== 'undefined' && transformer) transformer.forceUpdate()
+                
                 // Immediately applies the physical styles to the text object before opening the editor if it's a Captions Group
                 if (targetNode.getAttr('captionsGroupName')) {
                     const activeIdx = targetNode.getAttr('activeCaptionEditIndex') || 0
@@ -4193,7 +4294,6 @@ export function initTransformsPanel(node) {
                 }
 
                 const nClass = targetNode.getClassName()
-                const innerText = typeof targetNode.findOne === 'function' ? targetNode.findOne('.inner-text') : null
                 
                 if ((nClass === 'Group' && innerText) || nClass === 'Text') {
                     openTextEditor(targetNode)
@@ -4255,38 +4355,64 @@ export function initTransformsPanel(node) {
             if (targetNode) {
                 // Automatically jumps the video to the specific transform's marker time for previewing
                 const video = document.getElementById('main-video')
-                if (video) {
-                    if (configData.interval && configData.interval.start !== undefined) {
-                        video.currentTime = configData.interval.start
-                        const scrubber = document.getElementById('timeline-scrubber')
-                        const progress = document.getElementById('scrubber-progress')
-                        if (scrubber && progress && video.duration) {
-                            scrubber.value = configData.interval.start
-                            progress.style.width = (configData.interval.start / video.duration) * 100 + '%'
-                        }
+                const activeIdx = configData.activeTransformEditIndex || 0
+                const activeEl = configData.transformGroupData && configData.transformGroupData[activeIdx] ? configData.transformGroupData[activeIdx] : {}
+                const jumpTarget = activeEl.transform_interval && activeEl.transform_interval.start !== undefined ? parseFloat(activeEl.transform_interval.start) : (configData.interval ? configData.interval.start : 0)
+
+                if (video && jumpTarget !== undefined) {
+                    video.currentTime = jumpTarget
+                    const scrubber = document.getElementById('timeline-scrubber')
+                    const progress = document.getElementById('scrubber-progress')
+                    if (scrubber && progress && video.duration) {
+                        scrubber.value = jumpTarget
+                        progress.style.width = (jumpTarget / video.duration) * 100 + '%'
                     }
                 }
 
-                targetNode.x(configData.Blocking.x)
-                targetNode.y(configData.Blocking.y)
-                targetNode.width(configData.Blocking.width)
-                targetNode.height(configData.Blocking.height)
-                targetNode.scaleX(configData.Blocking.scaleX)
-                targetNode.scaleY(configData.Blocking.scaleY)
-                targetNode.rotation(configData.Blocking.rotation)
-                targetNode.offsetX(configData.Blocking.offsetX)
-                targetNode.offsetY(configData.Blocking.offsetY)
-                targetNode.opacity(configData.Styling.opacity)
+                const blocking = activeEl.Blocking || configData.Blocking
+                const styling = activeEl.Styling || configData.Styling
+
+                targetNode.x(blocking.x)
+                targetNode.y(blocking.y)
+                targetNode.width(blocking.width)
+                targetNode.height(blocking.height)
+                targetNode.scaleX(blocking.scaleX)
+                targetNode.scaleY(blocking.scaleY)
+                targetNode.rotation(blocking.rotation)
+                targetNode.offsetX(blocking.offsetX)
+                targetNode.offsetY(blocking.offsetY)
+                targetNode.opacity(styling.opacity !== undefined ? styling.opacity : 1)
                 
                 const innerText = typeof targetNode.findOne === 'function' ? targetNode.findOne('.inner-text') : null
-                if (innerText && configData.Styling.Text) {
-                    innerText.fontFamily(configData.Styling.Text.fontFamily)
-                    innerText.fontSize(configData.Styling.Text.fontSize)
-                    innerText.fontStyle(configData.Styling.Text.fontStyle)
-                    innerText.align(configData.Styling.Text.align)
-                    innerText.fill(configData.Styling.Text.fill)
-                    innerText.stroke(configData.Styling.Text.stroke || 'transparent')
-                    innerText.strokeWidth(configData.Styling.Text.strokeWidth || 0)
+                if (innerText && styling.Text) {
+                    innerText.fontFamily(styling.Text.fontFamily)
+                    innerText.fontSize(styling.Text.fontSize)
+                    innerText.fontStyle(styling.Text.fontStyle)
+                    innerText.align(styling.Text.align)
+                    innerText.fill(styling.Text.fill)
+                    innerText.stroke(styling.Text.stroke || 'transparent')
+                    innerText.strokeWidth(styling.Text.strokeWidth || 0)
+                } else if (styling.Shape) {
+                    if (targetNode.fill) targetNode.fill(styling.Shape.fill)
+                }
+                
+                if (styling.Border && !innerText) {
+                    if (targetNode.stroke) targetNode.stroke(styling.Border.color)
+                    if (targetNode.strokeWidth) targetNode.strokeWidth(styling.Border.thickness)
+                    if (targetNode.dash) targetNode.dash(styling.Border.dash || [])
+                } else if (!innerText) {
+                    if (targetNode.stroke) targetNode.stroke('transparent')
+                }
+                
+                const shadowTarget = innerText || targetNode
+                if (styling.Shadow) {
+                    shadowTarget.shadowColor(styling.Shadow.color)
+                    shadowTarget.shadowBlur(styling.Shadow.blur)
+                    shadowTarget.shadowOffsetX(styling.Shadow.offsetX)
+                    shadowTarget.shadowOffsetY(styling.Shadow.offsetY)
+                    shadowTarget.shadowOpacity(styling.Shadow.opacity)
+                } else {
+                    shadowTarget.shadowOpacity(0)
                 }
                 
                 if (targetNode !== activeNode && typeof setActiveNode === 'function') setActiveNode(targetNode)
@@ -4598,10 +4724,17 @@ export function initTransformsPanel(node) {
                     const layersTab = document.getElementById('layers-tab')
                     const cachedParentScroll = layersTab ? layersTab.scrollTop : 0
 
-                    configData.activeTransformEditIndex = i
                     const tRow = matrixDiv.closest('.transforms-list-item')
                     if (tRow) {
-                        tRow.dataset.transformConfig = JSON.stringify(configData)
+                        try {
+                            const currentCfg = JSON.parse(tRow.dataset.transformConfig)
+                            currentCfg.activeTransformEditIndex = i
+                            configData.activeTransformEditIndex = i
+                            tRow.dataset.transformConfig = JSON.stringify(currentCfg)
+                        } catch(err) {
+                            configData.activeTransformEditIndex = i
+                            tRow.dataset.transformConfig = JSON.stringify(configData)
+                        }
                         
                         if (typeof syncTransformsFromDOM === 'function') {
                             syncTransformsFromDOM()
@@ -4709,17 +4842,25 @@ export function initTransformsPanel(node) {
                 
                 // dynamically appends a new unique integer index marker element layout block sequentially
                 const nextIdx = activeKeys.length
-                configData.transformGroupData[nextIdx] = {
+                
+                const tRow = matrixDiv.closest('.transforms-list-item')
+                let currentCfg = configData
+                if (tRow) {
+                    try { currentCfg = JSON.parse(tRow.dataset.transformConfig) } catch(err) {}
+                }
+                
+                currentCfg.transformGroupData[nextIdx] = {
                     set_id: `set_${generateSplitId()}`,
                     style_id: `style_${generateSplitId()}`,
                     transform_interval: { start: newStart, end: newEnd }
                 }
                 
+                currentCfg.activeTransformEditIndex = nextIdx
+                configData.transformGroupData = currentCfg.transformGroupData
                 configData.activeTransformEditIndex = nextIdx
                 
-                const tRow = matrixDiv.closest('.transforms-list-item')
                 if (tRow) {
-                    tRow.dataset.transformConfig = JSON.stringify(configData)
+                    tRow.dataset.transformConfig = JSON.stringify(currentCfg)
                 }
                 
                 window._forceTimelineAutoSelect = true
@@ -4769,18 +4910,26 @@ export function initTransformsPanel(node) {
                     newIdx++
                 }
                 
+                const tRow = matrixDiv.closest('.transforms-list-item')
+                let currentCfg = configData
+                if (tRow) {
+                    try { currentCfg = JSON.parse(tRow.dataset.transformConfig) } catch(err) {}
+                }
+                
+                currentCfg.transformGroupData = newTData
                 configData.transformGroupData = newTData
                 
                 // shifts active selection safely to the prior element or preserves index 0
                 if (activeIdx >= newIdx && newIdx > 0) {
+                    currentCfg.activeTransformEditIndex = newIdx - 1
                     configData.activeTransformEditIndex = newIdx - 1
                 } else if (activeIdx >= newIdx) {
+                    currentCfg.activeTransformEditIndex = 0
                     configData.activeTransformEditIndex = 0
                 }
                 
-                const tRow = matrixDiv.closest('.transforms-list-item')
                 if (tRow) {
-                    tRow.dataset.transformConfig = JSON.stringify(configData)
+                    tRow.dataset.transformConfig = JSON.stringify(currentCfg)
                 }
                 
                 // forces the matrix to visually refresh without jumping
@@ -4955,6 +5104,7 @@ export function initTransformsPanel(node) {
             const cfg = JSON.parse(newRow.dataset.transformConfig)
             cfg.isTimingOpen = isHidden
             newRow.dataset.transformConfig = JSON.stringify(cfg)
+            configData.isTimingOpen = isHidden
             
             if (typeof activeNode !== 'undefined' && activeNode) {
                 let existingData = activeNode.getAttr('transformGroupData')
