@@ -882,8 +882,12 @@ export function renderTimelineIntervals() {
                     }
                     
                     const overlapsContainer = document.createElement('div')
-                    overlapsContainer.style.cssText = 'position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:6;'
+                    overlapsContainer.style.cssText = 'position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:16;'
                     intervalBlock.appendChild(overlapsContainer)
+
+                    const labelsContainer = document.createElement('div')
+                    labelsContainer.style.cssText = 'position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:25;'
+                    intervalBlock.appendChild(labelsContainer)
                     
                     const renderOverlaps = () => {
                         overlapsContainer.innerHTML = ''
@@ -912,9 +916,11 @@ export function renderTimelineIntervals() {
                                     overlapDiv.style.width = `${(ePct - sPct) * 100}%`
                                     overlapDiv.style.height = '6px'
                                     overlapDiv.style.top = '3px'
-                                    overlapDiv.style.backgroundImage = 'repeating-linear-gradient(45deg, rgba(0,0,0,0.3), rgba(0,0,0,0.3) 2px, transparent 2px, transparent 4px), repeating-linear-gradient(-45deg, rgba(0,0,0,0.3), rgba(0,0,0,0.3) 2px, transparent 2px, transparent 4px)'
-                                    overlapDiv.style.backgroundSize = 'auto'
-                                    overlapDiv.style.backgroundColor = 'transparent'
+                                    overlapDiv.style.backgroundImage = 'repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.2) 1px, transparent 1px, transparent 3px), repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.2) 1px, transparent 1px, transparent 3px)'
+                                    overlapDiv.style.backgroundSize = '4px 4px'
+                                    overlapDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.15)'
+                                    overlapDiv.style.mixBlendMode = 'multiply'
+                                    overlapDiv.style.opacity = '0.5'
                                     overlapsContainer.appendChild(overlapDiv)
                                 }
                             }
@@ -953,16 +959,28 @@ export function renderTimelineIntervals() {
                         tmarkerThread.style.backgroundImage = 'none'
                         tmarkerThread.style.setProperty('opacity', '1', 'important')
                         
-                        tmarkerThread.style.display = 'flex'
-                        tmarkerThread.style.alignItems = 'center'
-                        tmarkerThread.style.justifyContent = 'center'
-                        
+                        const threadLabelContainer = document.createElement('div')
+                        threadLabelContainer.className = 'tmarker-thread-label-container'
+                        threadLabelContainer.dataset.matrixIndex = i
+                        threadLabelContainer.dataset.transformKey = tKey
+                        threadLabelContainer.style.position = 'absolute'
+                        threadLabelContainer.style.left = `${sPct * 100}%`
+                        threadLabelContainer.style.width = `${(ePct - sPct) * 100}%`
+                        threadLabelContainer.style.height = '6px'
+                        threadLabelContainer.style.top = '3px'
+                        threadLabelContainer.style.display = 'flex'
+                        threadLabelContainer.style.alignItems = 'center'
+                        threadLabelContainer.style.justifyContent = 'center'
+                        threadLabelContainer.style.pointerEvents = 'none'
+
                         const threadLabel = document.createElement('span')
                         threadLabel.className = 'tmarker-thread-label'
                         threadLabel.innerText = (i + 1).toString()
                         const counterScale = window.isIntervalBlockZoomed ? 0.4 : 1
                         threadLabel.style.cssText = `position: relative; z-index: 7; color: #000; font-size: 8px; font-weight: bold; font-family: monospace; pointer-events: none; user-select: none; opacity: 0.8; background-color: rgba(255,255,255,0.7); padding: 0 2px; border-radius: 2px; transition: all 0.2s; transform: scaleY(${counterScale}); display: ${window.isIntervalBlockZoomed ? 'block' : 'none'};`
-                        tmarkerThread.appendChild(threadLabel)
+                        
+                        threadLabelContainer.appendChild(threadLabel)
+                        labelsContainer.appendChild(threadLabelContainer)
 
                         tmarkerThread.addEventListener('mousemove', (e) => {
                             if (e.buttons > 0) {
@@ -1058,6 +1076,11 @@ export function renderTimelineIntervals() {
                                 e.stopPropagation()
                                 marker.isDragging = true
                                 
+                                // Elevates the active thread to the top of the z-index stack during drag to ensure it overlaps
+                                if (tmarkerThread.parentNode) {
+                                    tmarkerThread.parentNode.appendChild(tmarkerThread)
+                                }
+                                
                                 const startX = e.clientX
                                 const initialPct = (isStart ? parseFloat(tInterval.start) - activeObj.startTime : parseFloat(tInterval.end) - activeObj.startTime) / (activeObj.endTime - activeObj.startTime)
                                 const parentRect = durationLine.getBoundingClientRect()
@@ -1100,11 +1123,14 @@ export function renderTimelineIntervals() {
                                     // Dynamically shrinks or stretches the physical tmarker thread as boundaries shift
                                     if (isStart) {
                                         tmarkerThread.style.left = `${currentMarkerPct}%`
+                                        threadLabelContainer.style.left = `${currentMarkerPct}%`
                                         const endPctVal = (parseFloat(tInterval.end) - activeObj.startTime) / (activeObj.endTime - activeObj.startTime)
                                         tmarkerThread.style.width = `${(endPctVal - newPct) * 100}%`
+                                        threadLabelContainer.style.width = `${(endPctVal - newPct) * 100}%`
                                     } else {
                                         const startPctVal = (parseFloat(tInterval.start) - activeObj.startTime) / (activeObj.endTime - activeObj.startTime)
                                         tmarkerThread.style.width = `${(newPct - startPctVal) * 100}%`
+                                        threadLabelContainer.style.width = `${(newPct - startPctVal) * 100}%`
                                     }
                                     
                                     // Invokes rendering engine to update marker labels in real-time
@@ -1170,6 +1196,11 @@ export function renderTimelineIntervals() {
                         tmarkerThread.ondblclick = (e) => {
                             if (e && e.preventDefault) e.preventDefault()
                             if (e && e.stopPropagation) e.stopPropagation()
+                            
+                            // Elevates the active thread to the top of the z-index stack when selected
+                            if (tmarkerThread.parentNode) {
+                                tmarkerThread.parentNode.appendChild(tmarkerThread)
+                            }
                             
                             if (!window.isIntervalBlockZoomed) {
                                 intervalBlock.style.transition = 'transform 0.2s ease'
@@ -1563,7 +1594,7 @@ export function renderTimelineIntervals() {
         intervalBlock.style.width = widthPct + '%'
 
         // dynamically recalculates absolute time percentages for transform markers to prevent visual stretching
-        intervalBlock.querySelectorAll('.tmarker-thread').forEach(thread => {
+        intervalBlock.querySelectorAll('.tmarker-thread, .tmarker-thread-label-container').forEach(thread => {
             const mIdx = thread.dataset.matrixIndex
             const tKey = thread.dataset.transformKey
             const tGroupData = activeObj.node.getAttr('transformGroupData')
