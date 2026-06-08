@@ -910,11 +910,11 @@ export function renderTimelineIntervals() {
                                     overlapDiv.style.position = 'absolute'
                                     overlapDiv.style.left = `${sPct * 100}%`
                                     overlapDiv.style.width = `${(ePct - sPct) * 100}%`
-                                    overlapDiv.style.height = '4px'
-                                    overlapDiv.style.top = '50%'
-                                    overlapDiv.style.transform = 'translateY(-50%)'
-                                    overlapDiv.style.backgroundImage = 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0, 0, 0, 0.4) 2px, rgba(0, 0, 0, 0.4) 4px), repeating-linear-gradient(-45deg, transparent, transparent 2px, rgba(0, 0, 0, 0.4) 2px, rgba(0, 0, 0, 0.4) 4px)'
-                                    overlapDiv.style.backgroundColor = 'rgba(255, 255, 255, 0.4)'
+                                    overlapDiv.style.height = '6px'
+                                    overlapDiv.style.top = '3px'
+                                    overlapDiv.style.backgroundImage = 'repeating-linear-gradient(45deg, rgba(0,0,0,0.3), rgba(0,0,0,0.3) 2px, transparent 2px, transparent 4px), repeating-linear-gradient(-45deg, rgba(0,0,0,0.3), rgba(0,0,0,0.3) 2px, transparent 2px, transparent 4px)'
+                                    overlapDiv.style.backgroundSize = 'auto'
+                                    overlapDiv.style.backgroundColor = 'transparent'
                                     overlapsContainer.appendChild(overlapDiv)
                                 }
                             }
@@ -1232,10 +1232,10 @@ export function renderTimelineIntervals() {
                             })
                             sMarker.style.pointerEvents = 'auto'
                             sMarker.style.cursor = 'ew-resize'
-                            sMarker.style.top = '-10px'
+                            sMarker.style.top = '0'
                             eMarker.style.pointerEvents = 'auto'
                             eMarker.style.cursor = 'ew-resize'
-                            eMarker.style.top = '-10px'
+                            eMarker.style.top = '0'
 
                             // Highlight this thread label, reset others
                             document.querySelectorAll('.tmarker-thread-label').forEach(lbl => {

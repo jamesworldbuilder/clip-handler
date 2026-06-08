@@ -3690,8 +3690,10 @@ window.updateAdvancedConfigDisplay = () => {
     // auto-generates a default first index element for newly created objects
     if (markers.length === 0) {
         const baseStart = targetNode.getAttr('transformGroupData')?.[valStr]?.interval?.start ?? (currentObj ? currentObj.startTime : 0)
-        const sTime = Number((parseFloat(baseStart) + 0.05).toFixed(3))
-        const eTime = Number((sTime + 0.15).toFixed(3))
+        const baseEnd = targetNode.getAttr('transformGroupData')?.[valStr]?.interval?.end ?? (currentObj ? currentObj.endTime : Infinity)
+        const sTime = Number(parseFloat(baseStart).toFixed(3))
+        let eTime = Number((sTime + 0.15).toFixed(3))
+        if (eTime > baseEnd) eTime = Number(parseFloat(baseEnd).toFixed(3))
         tData = { "0": { transform_interval: { start: sTime, end: eTime } } }
         markers = Object.keys(tData)
     }
@@ -3870,14 +3872,10 @@ export const buildTransformConfig = (node) => {
         flipV: node.scaleY() < 0
     }
     
-    // elevates interval block to sit at root level of the generated transform dictionary and applies default 50ms offsets
+    // elevates interval block to sit at root level of the generated transform dictionary
     if (currentObj && currentObj.startTime !== undefined) {
-        let sTime = Number(currentObj.startTime) + 0.05
-        let eTime = Number(currentObj.endTime) - 0.05
-        if (sTime >= eTime) {
-            sTime = Number(currentObj.startTime)
-            eTime = Number(currentObj.endTime)
-        }
+        let sTime = Number(currentObj.startTime)
+        let eTime = Number(currentObj.endTime)
         config.interval = {
             start: Number(sTime.toFixed(3)),
             end: Number(eTime.toFixed(3))
@@ -4136,7 +4134,7 @@ export function initTransformsPanel(node) {
             configData.markerColor = `hsl(${hue}, 100%, 50%)`
         }
         
-        // applies default interval 50ms offsets inside active object boundaries
+        // applies interval boundaries perfectly synced to the active object boundaries
         if (!configData.interval) {
             let sTime = 0, eTime = 5
             if (typeof activeNode !== 'undefined' && activeNode) {
@@ -4150,12 +4148,8 @@ export function initTransformsPanel(node) {
                     })
                 }
                 if (trackObj) {
-                    sTime = Number(trackObj.startTime || 0) + 0.05
-                    eTime = Number(trackObj.endTime || 5) - 0.05
-                    if (sTime >= eTime) {
-                        sTime = Number(trackObj.startTime || 0)
-                        eTime = Number(trackObj.endTime || 5)
-                    }
+                    sTime = Number(trackObj.startTime || 0)
+                    eTime = Number(trackObj.endTime || 5)
                 }
             }
             configData.interval = { start: Number(sTime.toFixed(3)), end: Number(eTime.toFixed(3)) }
@@ -4694,12 +4688,16 @@ export function initTransformsPanel(node) {
             
             // tightly couples the matrix data to the row's configData to prevent sync overwrites
             if (!configData.transformGroupData) {
-                let defaultStart = configData.interval && configData.interval.start !== undefined ? Number((parseFloat(configData.interval.start) + 0.05).toFixed(3)) : 0.05
+                let defaultStart = configData.interval && configData.interval.start !== undefined ? Number(parseFloat(configData.interval.start).toFixed(3)) : 0
                 let defaultEnd = Number((defaultStart + 0.15).toFixed(3))
+                let maxEnd = configData.interval && configData.interval.end !== undefined ? Number(parseFloat(configData.interval.end).toFixed(3)) : Infinity
+                if (defaultEnd > maxEnd) defaultEnd = maxEnd
                 configData.transformGroupData = { 0: { transform_interval: { start: defaultStart, end: defaultEnd } } }
             } else if (configData.transformGroupData[0] && !configData.transformGroupData[0].transform_interval) {
-                let defaultStart = configData.interval && configData.interval.start !== undefined ? Number((parseFloat(configData.interval.start) + 0.05).toFixed(3)) : 0.05
+                let defaultStart = configData.interval && configData.interval.start !== undefined ? Number(parseFloat(configData.interval.start).toFixed(3)) : 0
                 let defaultEnd = Number((defaultStart + 0.15).toFixed(3))
+                let maxEnd = configData.interval && configData.interval.end !== undefined ? Number(parseFloat(configData.interval.end).toFixed(3)) : Infinity
+                if (defaultEnd > maxEnd) defaultEnd = maxEnd
                 configData.transformGroupData[0].transform_interval = { start: defaultStart, end: defaultEnd }
             }
             let totalMarkers = Object.keys(configData.transformGroupData).length
@@ -4743,8 +4741,10 @@ export function initTransformsPanel(node) {
                         const timingDiv = tRow.querySelector('.transform-interval-timing')
                         if (timingDiv) {
                             const activeTConfig = configData.transformGroupData[i] || {}
-                            const fallbackStart = configData.interval && configData.interval.start !== undefined ? Number((parseFloat(configData.interval.start) + 0.05).toFixed(3)) : 0.05
-                            const fallbackEnd = Number((fallbackStart + 0.15).toFixed(3))
+                            const fallbackStart = configData.interval && configData.interval.start !== undefined ? Number(parseFloat(configData.interval.start).toFixed(3)) : 0
+                            let fallbackEnd = Number((fallbackStart + 0.15).toFixed(3))
+                            const maxEnd = configData.interval && configData.interval.end !== undefined ? Number(parseFloat(configData.interval.end).toFixed(3)) : Infinity
+                            if (fallbackEnd > maxEnd) fallbackEnd = maxEnd
                             const tInterval = activeTConfig.transform_interval || { start: fallbackStart, end: fallbackEnd }
                             
                             const sGroup = timingDiv.querySelector('[data-target="start"]')
@@ -4799,13 +4799,33 @@ export function initTransformsPanel(node) {
             addMatrixBtn.innerText = '+'
             addMatrixBtn.title = 'Add Transform Configuration Element'
             
-            // visually overrides color and pointer events if global cap of 64 is reached
-            addMatrixBtn.style.cssText = `width:24px; height:24px; background:#1a252f; border:1px solid #34495e; color:${totalMarkers >= 64 ? '#555' : '#00a8ff'}; font-size:16px; font-weight:bold; cursor:${totalMarkers >= 64 ? 'not-allowed' : 'pointer'}; border-radius:2px; display:flex; align-items:center; justify-content:center; padding:0; box-sizing:border-box;`
+            let totalElementDuration = 0
+            if (configData.transformGroupData) {
+                Object.keys(configData.transformGroupData).forEach(k => {
+                    const tInv = configData.transformGroupData[k].transform_interval
+                    if (tInv && tInv.start !== undefined && tInv.end !== undefined) {
+                        totalElementDuration += (parseFloat(tInv.end) - parseFloat(tInv.start))
+                    }
+                })
+            }
+            
+            let parentDuration = 0
+            const aObj = getActiveObj()
+            if (aObj && aObj.startTime !== undefined && aObj.endTime !== undefined) {
+                parentDuration = aObj.endTime - aObj.startTime
+            }
+            
+            const isMaxedOut = parentDuration > 0 && totalElementDuration >= (parentDuration - 0.01)
+
+            // visually overrides color and pointer events if global cap or duration limit is reached
+            addMatrixBtn.style.cssText = `width:24px; height:24px; background:#1a252f; border:1px solid #34495e; color:${(totalMarkers >= 64 || isMaxedOut) ? '#555' : '#00a8ff'}; font-size:16px; font-weight:bold; cursor:${(totalMarkers >= 64 || isMaxedOut) ? 'not-allowed' : 'pointer'}; border-radius:2px; display:flex; align-items:center; justify-content:center; padding:0; box-sizing:border-box;`
             
             addMatrixBtn.onclick = (e) => {
                 e.preventDefault()
                 e.stopPropagation()
                 
+                if (isMaxedOut) return
+
                 // read fresh key lengths directly from the dictionary map target data to prevent layout collapse
                 const activeKeys = Object.keys(configData.transformGroupData || {})
                 if (activeKeys.length >= 64) return
@@ -4820,25 +4840,40 @@ export function initTransformsPanel(node) {
                     return result
                 }
 
-                // computes sequential interval timing based on the previous matrix element with a 5 millisecond gap
-                let newStart = 0.05
-                let newEnd = 0.25
+                // computes sequential interval timing chaining strictly from the end of the previous element
+                let newStart = 0
+                let newEnd = 0.15
                 if (activeKeys.length > 0) {
                     const lastKey = activeKeys[activeKeys.length - 1]
                     const lastInterval = configData.transformGroupData[lastKey].transform_interval || configData.transformGroupData[lastKey].interval
                     if (lastInterval && lastInterval.end !== undefined) {
                         // explicitly parses end value to float before mathematical addition to prevent string concatenation crashes
                         const parsedEnd = parseFloat(lastInterval.end)
-                        newStart = Number((parsedEnd + 0.05).toFixed(3))
+                        newStart = Number(parsedEnd.toFixed(3))
                         newEnd = Number((newStart + 0.15).toFixed(3))
                     }
                 } else {
                     // fallbacks to root tracking container limits if it is the first index position
                     if (configData.interval && configData.interval.start !== undefined) {
-                        newStart = Number((parseFloat(configData.interval.start) + 0.05).toFixed(3))
+                        newStart = Number(parseFloat(configData.interval.start).toFixed(3))
                         newEnd = Number((newStart + 0.15).toFixed(3))
                     }
                 }
+                
+                // dynamically shrinks the new marker if it exceeds the parent interval block's end boundary
+                const aObj = getActiveObj()
+                let maxEnd = Infinity
+                if (aObj && aObj.endTime !== undefined) {
+                    maxEnd = parseFloat(aObj.endTime)
+                } else if (configData.interval && configData.interval.end !== undefined) {
+                    maxEnd = parseFloat(configData.interval.end)
+                }
+                
+                if (newEnd > maxEnd) {
+                    newEnd = Number(maxEnd.toFixed(3))
+                }
+                
+                if (newEnd <= newStart) return
                 
                 // dynamically appends a new unique integer index marker element layout block sequentially
                 const nextIdx = activeKeys.length
@@ -4970,8 +5005,10 @@ export function initTransformsPanel(node) {
             
             const activeIdx = configData.activeTransformEditIndex || 0
             const activeTConfig = configData.transformGroupData && configData.transformGroupData[activeIdx] ? configData.transformGroupData[activeIdx] : {}
-            const fallbackStart = configData.interval && configData.interval.start !== undefined ? Number((parseFloat(configData.interval.start) + 0.05).toFixed(3)) : 0.05
-            const fallbackEnd = Number((fallbackStart + 0.15).toFixed(3))
+            const fallbackStart = configData.interval && configData.interval.start !== undefined ? Number(parseFloat(configData.interval.start).toFixed(3)) : 0
+            let fallbackEnd = Number((fallbackStart + 0.15).toFixed(3))
+            const maxEnd = configData.interval && configData.interval.end !== undefined ? Number(parseFloat(configData.interval.end).toFixed(3)) : Infinity
+            if (fallbackEnd > maxEnd) fallbackEnd = maxEnd
             const tInterval = activeTConfig.transform_interval || { start: fallbackStart, end: fallbackEnd }
             const p = getTimeParts(parseFloat(tInterval[key]) || 0)
             
@@ -5116,8 +5153,10 @@ export function initTransformsPanel(node) {
             
             if (isHidden) {
                 const activeTConfig = cfg.transformGroupData && cfg.transformGroupData[cfg.activeTransformEditIndex || 0] ? cfg.transformGroupData[cfg.activeTransformEditIndex || 0] : {}
-                const fallbackStart = cfg.interval && cfg.interval.start !== undefined ? Number((parseFloat(cfg.interval.start) + 0.05).toFixed(3)) : 0.05
-                const fallbackEnd = Number((fallbackStart + 0.15).toFixed(3))
+                const fallbackStart = cfg.interval && cfg.interval.start !== undefined ? Number(parseFloat(cfg.interval.start).toFixed(3)) : 0
+                let fallbackEnd = Number((fallbackStart + 0.15).toFixed(3))
+                const maxEnd = cfg.interval && cfg.interval.end !== undefined ? Number(parseFloat(cfg.interval.end).toFixed(3)) : Infinity
+                if (fallbackEnd > maxEnd) fallbackEnd = maxEnd
                 const tInterval = activeTConfig.transform_interval || { start: fallbackStart, end: fallbackEnd }
                 
                 const sGroup = newTimingDiv.querySelector('[data-target="start"]')
