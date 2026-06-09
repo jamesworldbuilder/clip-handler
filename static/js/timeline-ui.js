@@ -583,8 +583,8 @@ export function renderTimelineIntervals() {
                 if (arr.style.borderRightColor) arr.style.borderRightColor = '#000'
             })
             document.querySelectorAll('.tmarker-handle').forEach(m => {
-                m.style.pointerEvents = 'none'
-                m.style.cursor = 'default'
+                m.style.pointerEvents = 'auto'
+                m.style.cursor = 'pointer'
                 m.style.top = '0'
             })
             document.querySelectorAll('.s-dyn-ruler-val, .e-dyn-ruler-val').forEach(el => el.remove())
@@ -696,8 +696,8 @@ export function renderTimelineIntervals() {
                     if (arr.style.borderRightColor) arr.style.borderRightColor = '#000'
                 })
                 document.querySelectorAll('.tmarker-handle').forEach(m => {
-                    m.style.pointerEvents = 'none'
-                    m.style.cursor = 'default'
+                    m.style.pointerEvents = 'auto'
+                    m.style.cursor = 'pointer'
                     m.style.top = '0'
                 })
                 window.activeTMarkerThreadRenderer = null
@@ -916,11 +916,9 @@ export function renderTimelineIntervals() {
                                     overlapDiv.style.width = `${(ePct - sPct) * 100}%`
                                     overlapDiv.style.height = '6px'
                                     overlapDiv.style.top = '3px'
-                                    overlapDiv.style.backgroundImage = 'repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.2) 1px, transparent 1px, transparent 3px), repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.2) 1px, transparent 1px, transparent 3px)'
-                                    overlapDiv.style.backgroundSize = '4px 4px'
-                                    overlapDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.15)'
-                                    overlapDiv.style.mixBlendMode = 'multiply'
-                                    overlapDiv.style.opacity = '0.5'
+                                    overlapDiv.style.backgroundImage = 'repeating-linear-gradient(45deg, rgba(255,255,255,0.6), rgba(255,255,255,0.6) 2px, transparent 2px, transparent 4px), repeating-linear-gradient(-45deg, rgba(255,255,255,0.6), rgba(255,255,255,0.6) 2px, transparent 2px, transparent 4px)'
+                                    overlapDiv.style.backgroundSize = 'auto'
+                                    overlapDiv.style.backgroundColor = 'transparent'
                                     overlapsContainer.appendChild(overlapDiv)
                                 }
                             }
@@ -1048,10 +1046,10 @@ export function renderTimelineIntervals() {
                             }
                             marker.appendChild(arrow)
                             
-                            // Initializes locked down to enforce thread double-click intent
-                            marker.style.cursor = 'default'
+                            // Initializes unlocked to allow direct double-click selection while dragging requires active state
+                            marker.style.cursor = 'pointer'
                             marker.style.zIndex = '30'
-                            marker.style.pointerEvents = 'none'
+                            marker.style.pointerEvents = 'auto'
                             
                             marker.title = `Transform Element ${i + 1} (${isStart ? 'Start' : 'End'}) (double-click to edit transform object)`
 
@@ -1072,13 +1070,19 @@ export function renderTimelineIntervals() {
                             }
                             
                             marker.onmousedown = (e) => {
+                                const isActive = threadLabel.classList.contains('active-thread-label')
+                                if (!isActive) return
+                                
                                 e.preventDefault()
                                 e.stopPropagation()
                                 marker.isDragging = true
                                 
-                                // Elevates the active thread to the top of the z-index stack during drag to ensure it overlaps
+                                // Elevates the active thread and its label to the top of the z-index stack during drag to ensure it overlaps
                                 if (tmarkerThread.parentNode) {
                                     tmarkerThread.parentNode.appendChild(tmarkerThread)
+                                }
+                                if (threadLabelContainer.parentNode) {
+                                    threadLabelContainer.parentNode.appendChild(threadLabelContainer)
                                 }
                                 
                                 const startX = e.clientX
@@ -1197,9 +1201,12 @@ export function renderTimelineIntervals() {
                             if (e && e.preventDefault) e.preventDefault()
                             if (e && e.stopPropagation) e.stopPropagation()
                             
-                            // Elevates the active thread to the top of the z-index stack when selected
+                            // Elevates the active thread and its label to the top of the z-index stack when selected
                             if (tmarkerThread.parentNode) {
                                 tmarkerThread.parentNode.appendChild(tmarkerThread)
+                            }
+                            if (threadLabelContainer.parentNode) {
+                                threadLabelContainer.parentNode.appendChild(threadLabelContainer)
                             }
                             
                             if (!window.isIntervalBlockZoomed) {
@@ -1227,14 +1234,14 @@ export function renderTimelineIntervals() {
                                 threadLabel.style.backgroundColor = 'rgba(255,255,255,0.7)'
                                 threadLabel.style.padding = '0 2px'
                                 
-                                sMarker.style.pointerEvents = 'none'
-                                sMarker.style.cursor = 'default'
+                                sMarker.style.pointerEvents = 'auto'
+                                sMarker.style.cursor = 'pointer'
                                 sMarker.style.top = '0'
                                 const sArrow = sMarker.querySelector('.tmarker-arrow')
                                 if (sArrow) sArrow.style.borderLeftColor = '#000'
                                 
-                                eMarker.style.pointerEvents = 'none'
-                                eMarker.style.cursor = 'default'
+                                eMarker.style.pointerEvents = 'auto'
+                                eMarker.style.cursor = 'pointer'
                                 eMarker.style.top = '0'
                                 const eArrow = eMarker.querySelector('.tmarker-arrow')
                                 if (eArrow) eArrow.style.borderRightColor = '#000'
@@ -1257,8 +1264,8 @@ export function renderTimelineIntervals() {
                             
                             // Unlocks draggability specifically for the double-clicked thread's markers
                             document.querySelectorAll('.tmarker-handle').forEach(m => {
-                                m.style.pointerEvents = 'none'
-                                m.style.cursor = 'default'
+                                m.style.pointerEvents = 'auto'
+                                m.style.cursor = 'pointer'
                                 m.style.top = '0'
                             })
                             sMarker.style.pointerEvents = 'auto'
