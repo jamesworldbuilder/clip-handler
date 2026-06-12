@@ -31,6 +31,7 @@ config/youtube-cookies.txt
 
 # temporary editor backup files
 *~
+*.~
 *.log
 *.pid
 *.tar.gz

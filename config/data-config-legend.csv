@@ -88,3 +88,6 @@ dev-toggle-btn,Button,Tracking Connection Panel
 "init-target-btn, edit-track-box-btn, reinit-track-box-btn",Buttons,Target Actions
 "confirm-track-box-btn, process-tracking-btn",Buttons,Process Tracking
 submit-queue-btn,Button,Export Tab
+time-display,Text Display,Transport Bar
+cancel-caption-group-btn,Button,Active Caption Group Header
+cancel-captions-group-btn,Button,Active Captions Group Header
