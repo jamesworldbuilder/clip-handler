@@ -1,0 +1,90 @@
+data-config-id,Element Type,UI Location
+timeline-scrubber,Range Input,Zoom Sync Wrap
+toggle-multi-track-btn,Button,Timeline Tracks
+play-pause-btn,Button,Transport Bar
+loop-toggle-btn,Button,Transport Bar
+mute-toggle,Checkbox,Transport Bar
+tab-layers,Button,Global Sidebar Header
+tab-canvas,Button,Global Sidebar Header
+tab-tracking,Button,Global Sidebar Header
+tab-export,Button,Global Sidebar Header
+add-text-btn,Button,Layers Top Nav
+add-shape-btn,Button,Layers Top Nav
+add-image-btn,Button,Layers Top Nav
+add-filter-btn,Button,Layers Top Nav
+local-image-input,File Input,Hidden (Triggered by Add Image)
+edit-object-name,Text Input,Text Edit Panel
+"edit-font-size, font-size-up, font-size-down",Number/Buttons,Typography Settings
+edit-font-style,Select Dropdown,Typography Settings
+edit-color-target,Select Dropdown,Typography Settings
+edit-shared-color,Color Picker,Typography Settings
+"edit-text-transparency, transp-up, transp-down",Number/Buttons,Typography Settings
+edit-color-none,Checkbox,Typography Settings
+"edit-stroke-width, stroke-up, stroke-down",Number/Buttons,Typography Settings
+edit-font-family,Select Dropdown,Typography Settings
+edit-text-align,Select Dropdown,Typography Settings
+confirm-text-btn,Button,Text Edit Panel (Bottom)
+edit-shadow-toggle,Button,Shadow Panel
+edit-shadow-color,Color Picker,Shadow Panel
+shadow-wheel,Div (Interactive),Shadow Panel
+edit-shadow-angle,Number Input,Shadow Panel
+"edit-shadow-blur, shadow-blur-up, shadow-blur-down",Number/Buttons,Shadow Softness
+"edit-shadow-thickness, shadow-thickness-up, shadow-thickness-down",Number/Buttons,Shadow Thickness
+shape-border-toggle,Button,Image/Shape Panel
+edit-shape-stroke,Color Picker,Image/Shape Panel
+edit-shape-stroke-style,Select Dropdown,Image/Shape Panel
+"edit-shape-stroke-width, shape-stroke-up, shape-stroke-down",Number/Buttons,Image/Shape Panel
+"border-side-top, border-side-right, border-side-bottom, border-side-left",Buttons,Image/Shape Panel
+transform-controls-toggle,Button,Transform Panel
+text-ratio-lock,Div (Button),Transform Panel
+"edit-text-width, edit-text-height",Number Inputs,Transform Panel
+"text-flip-h, text-flip-v, text-rot-90, text-center",Buttons,Transform Alignment
+advanced-transform-expander,Div (Button),Transform Advanced Options
+"transform-blocking-toggle, transform-styling-toggle",Buttons,Transform Advanced Options
+transform-mode-select,Select Dropdown,Transform Initial State
+start-transform-btn,Button,Transform Initial State
+cancel-transform-group-btn,Button,Active Transform Header
+"new-transform-input, add-transform-row-btn",Input/Button,Transforms List Container
+cancel-caption-group-btn / cancel-captions-group-btn,Button,Captions Headers
+captions-mode-select,Select Dropdown,Captions Init State
+start-captions-btn,Button,Captions Init State
+back-captions-mode-btn,Button,Captions Target Wrapper
+existing-groups-select,Select Dropdown,Captions Target Wrapper
+"new-caption-input, add-caption-row-btn",Input/Button,Captions List Container
+edit-time-lock,Div (Button),Interval Timing Panel
+"edit-start-time-group, edit-end-time-group",Div (Data Targets),Interval Timing Panel
+image-object-name,Text Input,Image Panel
+edit-shape-type,Select Dropdown,Shape Panel
+edit-shape-fill,Color Picker,Shape Panel
+confirm-image-btn,Button,Image Panel
+edit-filter-type,Select Dropdown,Filter Panel
+"dof-blur-input, dof-blur-up, dof-blur-down",Number/Buttons,Depth of Field Panel
+"dof-core-input, dof-core-up, dof-core-down",Number/Buttons,Depth of Field Panel
+"dof-feather-input, dof-feather-up, dof-feather-down",Number/Buttons,Depth of Field Panel
+confirm-filter-btn,Button,Filter Panel
+follow-mode-select,Select Dropdown,Position Tracking Panel
+show-track-box-toggle,Checkbox,Position Tracking Panel
+follow-target-select,Select Dropdown,Follow Tracked Wrapper
+"follow-smooth-input, smooth-up, smooth-down",Number/Buttons,Motion Smoothing
+"follow-radius-slider, follow-radius-input, radius-up, radius-down",Slider/Number/Buttons,Sample Accuracy
+show-sample-area-toggle,Checkbox,Follow Tracked Wrapper
+"follow-edit-anchor-btn, cancel-anchor-btn, follow-track-anchor-btn",Buttons,Follow Anchors
+"follow-set-static-btn, cancel-static-btn",Buttons,Static Anchors
+show-canvas-grid-toggle,Checkbox,Canvas Settings
+"canvas-grid-density, grid-density-up, grid-density-down",Number/Buttons,Grid Density
+"crop-ratio-16-9, crop-ratio-9-16, crop-ratio-1-1, crop-ratio-4-5",Buttons,Canvas Cropping
+"edit-crop-btn, confirm-crop-btn",Buttons,Canvas Cropping
+letterbox-color,Color Picker,Canvas Letterboxing
+"add-horizontal-bars, add-vertical-bars",Buttons,Canvas Letterboxing
+"edit-letterbox-btn, clear-letterbox-btn, apply-letterbox-btn",Buttons,Canvas Letterboxing
+letterbox-thickness,Range Input,Canvas Letterboxing
+add-box-btn,Button,Tracking Tab (Hidden Base)
+dev-toggle-btn,Button,Tracking Connection Panel
+"ngrok-url-input, backend-auth-token, backend-connect-btn",Inputs/Button,Dev Connection Panel
+"add-track-target-btn, cancel-draw-btn",Buttons,Target Tracking Tools
+"track-target-name, confirm-name-btn",Input/Button,Target Properties
+"edit-track-width, edit-track-height",Number Inputs,Target Properties
+"track-prop-alpha, alpha-up, alpha-down",Number/Buttons,Tracking Accuracy
+"init-target-btn, edit-track-box-btn, reinit-track-box-btn",Buttons,Target Actions
+"confirm-track-box-btn, process-tracking-btn",Buttons,Process Tracking
+submit-queue-btn,Button,Export Tab

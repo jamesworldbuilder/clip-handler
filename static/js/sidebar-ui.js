@@ -5043,6 +5043,9 @@ export function initTransformsPanel(node) {
             
             const currentKey = row.dataset.transformKey || transformKey
             
+            window._activeTmarkerGrp = currentKey
+            window._forceTimelineAutoSelect = true
+            
             // Automatically select the parent transform-row
             const targetId = configData.id
             let targetNode = null
@@ -5183,6 +5186,9 @@ export function initTransformsPanel(node) {
             if (layersTab) layersTab.scrollTop = cachedParentScroll
             
             if (window.updateAdvancedConfigDisplay) window.updateAdvancedConfigDisplay()
+            
+            if (typeof renderTimelineIntervals === 'function') renderTimelineIntervals()
+            if (typeof renderMultiTrackTimeline === 'function') renderMultiTrackTimeline()
             
             window._preventMatrixReset = false
         }
@@ -6087,7 +6093,8 @@ export function initSidebarToggleBindings() {
             sidebar.classList.add('force-open')
             return
         }
-        if (sidebar.classList.contains('force-open') && !sidebar.contains(e.target)) {
+        // ONLY collapse if the sidebar itself is explicitly clicked again, not outside divs
+        if (sidebar.classList.contains('force-open') && e.target === sidebar) {
             sidebar.classList.remove('force-open')
         }
     })
