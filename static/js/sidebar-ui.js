@@ -3519,6 +3519,7 @@ export function initSidebarBindings() {
     initTrackingBindings()
     initAdvancedTransformBindings()
     initLayersPanelObserver()
+    initConfigTabBindings()
 }
 
 // synchronizes edit object name input dynamically when active layer list item is updated
@@ -3601,185 +3602,130 @@ window.updateAdvancedConfigDisplay = () => {
     
     if (configDisplay.style.display !== 'block') configDisplay.style.display = 'block'
     
-    const baseConfig = buildTransformConfig(activeNode)
-    if (!baseConfig) return
+    const tGroupName = activeNode.getAttr('transformGroupName') || 'Transform_Grp_0000'
     
-    // tracks which transform-list-item row is currently clicked/highlighted
-    const rowsContainer = document.getElementById('transforms-rows')
-    let targetNode = activeNode
-    let currentObj = null
-    
-    if (rowsContainer) {
-        const activeRow = Array.from(rowsContainer.children).find(r => r.style.borderLeftColor === 'rgb(0, 168, 255)' || r.style.borderLeftColor === '#00a8ff')
-        if (activeRow && activeRow.dataset.transformKey) {
-            const rowKey = activeRow.dataset.transformKey
-            if (typeof appLayers !== 'undefined') {
-                appLayers.forEach(l => {
-                    if (l.objects) {
-                        l.objects.forEach(o => {
-                            if (o.node && o.node.name() === rowKey) {
-                                targetNode = o.node
-                                currentObj = o
-                            }
-                        })
-                    }
-                })
-            }
-        }
-    }
-    
-    if (!currentObj && typeof appLayers !== 'undefined') {
-        appLayers.forEach(l => {
-            if (l.objects) {
-                l.objects.forEach(o => {
-                    if (o.node === targetNode) currentObj = o
-                })
-            }
-        })
-    }
-    
-    const objConfig = buildTransformConfig(targetNode)
-    const objId = objConfig.id
-    const tGroupName = targetNode.getAttr('transformGroupName') || 'Transform_Grp_0000'
-    
-    const innerText = typeof targetNode.findOne === 'function' ? targetNode.findOne('.inner-text') : null
-    let valStr = targetNode.name() || 'New_Object'
-    if (innerText && innerText.text) {
-        valStr = innerText.text()
-    }
-    
-    // aggregates dynamic counts from the matching active layer group
-    let totalObjectsInGroup = 1
+    // Extrapolates ALL objects sharing the active transform group
+    let totalObjectsInGroup = 0
+    const groupMembers = []
     if (typeof appLayers !== 'undefined') {
         appLayers.forEach(l => {
             if (l.objects) {
-                const matches = l.objects.filter(o => o.node && o.node.getAttr('transformGroupName') === tGroupName)
-                if (matches.length > 0) totalObjectsInGroup = matches.length
+                l.objects.forEach(o => {
+                    if (o.node && o.node.getAttr('transformGroupName') === tGroupName) {
+                        groupMembers.push(o)
+                        totalObjectsInGroup++
+                    }
+                })
             }
         })
     }
     
-    // builds single object snapshot structure
-    const targetObjData = {
-        value: valStr,
-        type: objConfig.type || 'Text',
-        Blocking: isBlockOn ? objConfig.Blocking : null,
-        Styling: isStyleOn ? objConfig.Styling : null,
-        objTransformations: {
-            markerColor: targetNode.getAttr('markerColor') || 'hsl(138, 100%, 50%)'
+    // Failsafe for a single ungrouped object
+    if (groupMembers.length === 0 && activeNode) {
+        let currentObj = null
+        if (typeof appLayers !== 'undefined') {
+            appLayers.forEach(l => {
+                if (l.objects) l.objects.forEach(o => { if (o.node === activeNode) currentObj = o })
+            })
         }
+        groupMembers.push(currentObj || { node: activeNode, startTime: 0, endTime: 5 })
+        totalObjectsInGroup = 1
     }
     
-    if (!isBlockOn) delete targetObjData.Blocking
-    if (!isStyleOn) delete targetObjData.Styling
-    
-    // tracks which transform-config-element index item is actively highlighted (defaults to the first element)
-    const activeMarkerIndex = targetNode.getAttr('activeTransformEditIndex') ?? 0
-    
-    let transformCoordsDict = {}
-    
-    // correctly isolates the specific object's transform elements array mapping
-    const fullGroupData = targetNode.getAttr('transformGroupData') || {}
-    let tData = {}
-    if (fullGroupData[valStr] && fullGroupData[valStr].transformGroupData) {
-        tData = fullGroupData[valStr].transformGroupData
-    }
-
-    let markers = Object.keys(tData)
-    
-    // auto-generates a default first index element for newly created objects
-    if (markers.length === 0) {
-        const baseStart = targetNode.getAttr('transformGroupData')?.[valStr]?.interval?.start ?? (currentObj ? currentObj.startTime : 0)
-        const baseEnd = targetNode.getAttr('transformGroupData')?.[valStr]?.interval?.end ?? (currentObj ? currentObj.endTime : Infinity)
-        const sTime = Number(parseFloat(baseStart).toFixed(3))
-        let eTime = Number((sTime + 0.15).toFixed(3))
-        if (eTime > baseEnd) eTime = Number(parseFloat(baseEnd).toFixed(3))
-        tData = { "0": { transform_interval: { start: sTime, end: eTime } } }
-        markers = Object.keys(tData)
-    }
-    
-    markers.forEach((markerKey, i) => {
-        let markerConfig = tData[markerKey]
-        
-        // generates randomized structural ids for transform mapping
-        const generateSplitId = () => {
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-            let result = ''
-            for (let i = 0; i < 8; i++) {
-                result += chars[Math.floor(Math.random() * chars.length)]
-            }
-            return result
-        }
-
-        // ensures transform ids exist for the selected transform row
-        if (!markerConfig.set_id) {
-            let setId = `set_${generateSplitId()}`
-            let styleId = `style_${generateSplitId()}`
-
-            while (setId === styleId) {
-                styleId = `style_${generateSplitId()}`
-            }
-
-            markerConfig.set_id = setId
-            markerConfig.style_id = styleId
-        } else if (!markerConfig.style_id) {
-            let styleId = `style_${generateSplitId()}`
-
-            while (markerConfig.set_id === styleId) {
-                styleId = `style_${generateSplitId()}`
-            }
-
-            markerConfig.style_id = styleId
-        }
-        
-        const setId = markerConfig.set_id
-        const styleId = markerConfig.style_id
-
-        // Initialize simplified root coords tracking array if not present
-        if (!targetObjData.coords) {
-            targetObjData.coords = []
-        }
-
-        // Push unique index integers into root coordinate tracking array loop sequence based on layout position
-        const numericIdx = i + 1
-        if (!targetObjData.coords.includes(numericIdx)) {
-            targetObjData.coords.push(numericIdx)
-        }
-            
-        // Rebuilds transform coordinate mapping with embedded temporal interval blocks
-        if (!transformCoordsDict[numericIdx]) {
-            transformCoordsDict[numericIdx] = {}
-        }
-
-        if (isBlockOn) {
-            const blockTarget = markerConfig.Blocking || objConfig.Blocking
-            transformCoordsDict[numericIdx][setId] = encodeData(blockTarget)
-        }
-
-        if (isStyleOn) {
-            const styleTarget = markerConfig.Styling || objConfig.Styling
-            transformCoordsDict[numericIdx][styleId] = encodeData(styleTarget)
-        }
-
-        // Embed interval coordinates directly to index payload layout
-        transformCoordsDict[numericIdx].transform_interval = markerConfig.transform_interval || markerConfig.interval || { start: 0.05, end: 0.25 }
-    })
-
-    // Remove legacy objTransformations structural object instantiation block entirely
-    if (targetObjData.objTransformations) {
-        delete targetObjData.objTransformations
-    }
-    
-    // builds clean isolated dictionary map matching your structural blueprint requirement
+    // Initializes the root JSON container
     const finalConfig = {
         [tGroupName]: {
             objCnt: totalObjectsInGroup,
-            [objId]: targetObjData,
-            transform_coords: {
-                [objId]: transformCoordsDict
-            }
+            transform_coords: {}
         }
     }
+    
+    // Loops through EVERY member of the group and bundles their properties
+    groupMembers.forEach(o => {
+        const targetNode = o.node
+        const objConfig = buildTransformConfig(targetNode)
+        const objId = objConfig.id
+        
+        const innerText = typeof targetNode.findOne === 'function' ? targetNode.findOne('.inner-text') : null
+        let valStr = targetNode.name() || 'New_Object'
+        if (innerText && innerText.text) valStr = innerText.text()
+        
+        const targetObjData = {
+            value: valStr,
+            type: objConfig.type || 'Text',
+            Blocking: isBlockOn ? objConfig.Blocking : null,
+            Styling: isStyleOn ? objConfig.Styling : null
+        }
+        if (!isBlockOn) delete targetObjData.Blocking
+        if (!isStyleOn) delete targetObjData.Styling
+        
+        let transformCoordsDict = {}
+        
+        const fullGroupData = targetNode.getAttr('transformGroupData') || {}
+        let tData = {}
+        if (fullGroupData[valStr] && fullGroupData[valStr].transformGroupData) {
+            tData = fullGroupData[valStr].transformGroupData
+        } else if (fullGroupData[targetNode.name()] && fullGroupData[targetNode.name()].transformGroupData) {
+            tData = fullGroupData[targetNode.name()].transformGroupData
+        } else {
+            const keys = Object.keys(fullGroupData)
+            if (keys.length > 0 && !isNaN(keys[0])) tData = fullGroupData
+        }
+        
+        let markers = Object.keys(tData).filter(k => !isNaN(k))
+        if (markers.length === 0) {
+            const baseStart = targetNode.getAttr('transformGroupData')?.[valStr]?.interval?.start ?? o.startTime ?? 0
+            const baseEnd = targetNode.getAttr('transformGroupData')?.[valStr]?.interval?.end ?? o.endTime ?? Infinity
+            const sTime = Number(parseFloat(baseStart).toFixed(3))
+            let eTime = Number((sTime + 0.15).toFixed(3))
+            if (eTime > baseEnd) eTime = Number(parseFloat(baseEnd).toFixed(3))
+            tData = { "0": { transform_interval: { start: sTime, end: eTime } } }
+            markers = Object.keys(tData)
+        }
+        
+        targetObjData.coords = []
+        
+        markers.forEach((markerKey, i) => {
+            let markerConfig = tData[markerKey]
+            
+            const generateSplitId = () => {
+                const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+                let result = ''
+                for (let j = 0; j < 8; j++) result += chars[Math.floor(Math.random() * chars.length)]
+                return result
+            }
+            
+            if (!markerConfig.set_id) {
+                markerConfig.set_id = `set_${generateSplitId()}`
+                markerConfig.style_id = `style_${generateSplitId()}`
+            } else if (!markerConfig.style_id) {
+                markerConfig.style_id = `style_${generateSplitId()}`
+            }
+            
+            const setId = markerConfig.set_id
+            const styleId = markerConfig.style_id
+            const numericIdx = i + 1
+            
+            targetObjData.coords.push(numericIdx)
+            transformCoordsDict[numericIdx] = {}
+            
+            if (isBlockOn) {
+                const blockTarget = markerConfig.Blocking || objConfig.Blocking
+                transformCoordsDict[numericIdx][setId] = encodeData(blockTarget)
+            }
+            
+            if (isStyleOn) {
+                const styleTarget = markerConfig.Styling || objConfig.Styling
+                transformCoordsDict[numericIdx][styleId] = encodeData(styleTarget)
+            }
+            
+            transformCoordsDict[numericIdx].transform_interval = markerConfig.transform_interval || markerConfig.interval || { start: 0.05, end: 0.25 }
+        })
+        
+        // Maps the object properties securely to the JSON root
+        finalConfig[tGroupName][objId] = targetObjData
+        finalConfig[tGroupName].transform_coords[objId] = transformCoordsDict
+    })
     
     // integrates inline JSON syntax highlighting using regex capture groups
     let jsonStr = JSON.stringify(finalConfig, null, 2)
@@ -3792,12 +3738,10 @@ window.updateAdvancedConfigDisplay = () => {
         .replace(/(: )(true|false)/g, '$1<span style="color:#e74c3c;">$2</span>')
         .replace(/(: )(null)/g, '$1<span style="color:#e74c3c;">$2</span>')
         
-    // highlights the inline array numbers that missed the colon-space regex
     jsonStr = jsonStr.replace(/"coords": \[(.*?)\]/g, (match, inner) => {
         return '"coords": [' + inner.replace(/([0-9]+)/g, '<span style="color:#2ecc71;">$1</span>') + ']';
     })
         
-    // strictly validates string delta to prevent excessive dom restamps during requestAnimationFrame loop
     if (configDisplay.innerHTML !== jsonStr) {
         configDisplay.innerHTML = jsonStr
     }
@@ -7196,3 +7140,489 @@ function initCaptionsPanel(node) {
     document.addEventListener('captionPlaybackSync', window._playbackSyncListener)
 }
 
+// Dynamically generates and binds the configuration export UI panel
+export function initConfigTabBindings() {
+    const configTab = document.getElementById('config-tab')
+    if (!configTab) return
+
+    // Maps configuration categories to their respective UI property data tags
+    const configCategories = {
+        "Typography & Colors": [
+            { id: "edit-font-family", label: "Font Family" },
+            { id: "edit-font-size", label: "Font Size" },
+            { id: "edit-font-style", label: "Font Style" },
+            { id: "edit-text-align", label: "Text Alignment" },
+            { id: "edit-shared-color", label: "Primary Color" },
+            { id: "edit-text-transparency", label: "Transparency" }
+        ],
+        "Shadows & Borders": [
+            { id: "edit-shadow-color", label: "Shadow Color" },
+            { id: "edit-shadow-blur", label: "Shadow Softness" },
+            { id: "edit-shadow-thickness", label: "Shadow Thickness" },
+            { id: "edit-shape-stroke", label: "Border Color" },
+            { id: "edit-shape-stroke-width", label: "Border Thickness" },
+            { id: "edit-shape-stroke-style", label: "Border Style" }
+        ],
+        "Transform & Sizing": [
+            { id: "edit-text-width", label: "Object Width" },
+            { id: "edit-text-height", label: "Object Height" },
+            { id: "text-ratio-lock", label: "Aspect Ratio Lock" }
+        ],
+        "Captions & Timing": [
+            { id: "captions-mode-select", label: "Captions Mode" },
+            { id: "existing-groups-select", label: "Target Caption Group" },
+            { id: "edit-time-lock", label: "Interval Lock" },
+            { id: "edit-start-time-group", label: "Start Time" },
+            { id: "edit-end-time-group", label: "End Time" }
+        ],
+        "Advanced Transforms": [], 
+        "Canvas & Filters": [
+            { id: "edit-filter-type", label: "Filter Type" },
+            { id: "dof-blur-input", label: "DOF Blur" },
+            { id: "dof-core-input", label: "DOF Focal Size" },
+            { id: "letterbox-color", label: "Letterbox Color" },
+            { id: "letterbox-thickness", label: "Letterbox Thickness" }
+        ],
+        "Tracking & Motion": [
+            { id: "follow-mode-select", label: "Tracking Mode" },
+            { id: "show-track-box-toggle", label: "Show Target Boundaries" },
+            { id: "follow-smooth-input", label: "Motion Smoothing" },
+            { id: "follow-radius-input", label: "Sample Accuracy" },
+            { id: "show-sample-area-toggle", label: "Show Sample Area" },
+            { id: "track-prop-alpha", label: "Tracking Trust" },
+            { id: "show-canvas-grid-toggle", label: "Show Canvas Grid" },
+            { id: "canvas-grid-density", label: "Grid Density" }
+        ]
+    }
+
+    const switchStyles = `
+    <style>
+        .config-switch-label { display:flex; align-items:center; font-size:11px; color:#ccc; cursor:pointer; justify-content:space-between; transition:0.2s; }
+        .config-switch-wrap { position:relative; display:inline-block; width:26px; height:14px; margin-right:8px; flex-shrink:0; }
+        .config-switch-wrap input { opacity:0; width:0; height:0; }
+        .config-switch-slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:#555; transition:.2s; border-radius:14px; }
+        .config-switch-slider:before { position:absolute; content:""; height:10px; width:10px; left:2px; bottom:2px; background-color:white; transition:.2s; border-radius:50%; }
+        .config-switch-wrap input:checked + .config-switch-slider { background-color:#00a8ff; }
+        .config-switch-wrap input:checked + .config-switch-slider:before { transform:translateX(12px); }
+        
+        .val-scroll-wrap { width:95px; overflow:hidden; display:flex; justify-content:flex-end; }
+        .config-val-display { color:#fff; font-weight:bold; font-family:monospace; white-space:nowrap; display:inline-block; transition:color 0.2s; }
+        .config-switch-label.disabled-val .config-val-display { color:#555 !important; text-decoration:line-through; opacity:0.5; }
+        .config-switch-label.disabled-val .config-item-name { color:#666; }
+        
+        .marquee-anim { animation: marquee-scroll 4s alternate linear infinite; }
+        @keyframes marquee-scroll {
+            0%, 15% { transform: translateX(0); }
+            85%, 100% { transform: translateX(calc(95px - 100%)); }
+        }
+    </style>`
+
+    let configUI = switchStyles + `<div id="config-export-panel" style="margin-top:0px; padding-top:0px; border-top:none;">
+        <h3 style="margin-bottom:15px; color:#f39c12;">Batch Configuration</h3>
+        <p style="font-size:11px; color:#aaa; margin-bottom:15px;">Select the properties to capture from the current project layout</p>
+        <div id="config-categories-wrap" style="display:flex; flex-direction:column; gap:15px; margin-bottom:20px;">`
+
+    Object.keys(configCategories).forEach(cat => {
+        configUI += `<div class="config-category">
+            <div style="font-size:12px; font-weight:bold; color:#00a8ff; margin-bottom:8px; text-transform:uppercase;">${cat}</div>
+            <div style="display:flex; flex-direction:column; gap:8px;">`
+        
+        if (cat === "Advanced Transforms") {
+            configUI += `<div id="dynamic-adv-transforms-container"></div>`
+        } else {
+            configCategories[cat].forEach(item => {
+                configUI += `<label class="config-switch-label" id="label-wrap-${item.id}">
+                    <div style="display:flex; align-items:center;">
+                        <div class="config-switch-wrap">
+                            <input type="checkbox" class="config-export-checkbox" data-target-id="${item.id}" checked>
+                            <span class="config-switch-slider"></span>
+                        </div>
+                        <span class="config-item-name">${item.label}</span>
+                    </div>
+                    <div class="val-scroll-wrap">
+                        <span class="config-val-display" id="val-disp-${item.id}">-</span>
+                    </div>
+                </label>`
+            })
+        }
+        
+        configUI += `</div></div>`
+    })
+
+    configUI += `</div>
+        <div style="display:flex; gap:10px;">
+            <button id="export-config-btn" class="action-btn" style="flex:1; background-color:#9b59b6; margin:0;">Export Template</button>
+            <button id="import-config-btn" class="action-btn" style="flex:1; background-color:#34495e; margin:0;">Load Template</button>
+        </div>
+        <input type="file" id="config-file-input" accept=".json" style="display:none;">
+    </div>`
+
+    configTab.innerHTML = ''
+    configTab.insertAdjacentHTML('beforeend', configUI)
+
+    // Helper to generate HTML for dynamic Advanced Transform properties
+    const buildAdvHTML = (id, label, val, isParent, parentId = '') => {
+        const indentStyle = parentId ? 'margin-left:15px; border-left:1px solid #444; padding-left:10px; margin-top:6px;' : 'margin-top:8px;'
+        const parentAttr = parentId ? `data-parent-id="${parentId}"` : ''
+        
+        const lowerLabel = label.toLowerCase()
+        
+        if (lowerLabel.includes('color') || lowerLabel.includes('fill') || lowerLabel.includes('stroke') || lowerLabel.includes('shadow')) {
+            if (Array.isArray(val)) {
+                if (val.length === 4) val = `rgba(${val.join(', ')})`
+                else if (val.length === 3) val = `rgb(${val.join(', ')})`
+            } else if (typeof val === 'string' && /^[\d\s\.]+,[\d\s\.]+,[\d\s\.]+(,[\d\s\.]+)?$/.test(val)) {
+                val = val.split(',').length === 4 ? `rgba(${val})` : `rgb(${val})`
+            }
+        } else if (Array.isArray(val)) {
+            val = `[${val.join(', ')}]`
+        }
+
+        let displayVal = val === '' || val === null || val === undefined ? '-' : String(val)
+        let valColor = '#fff'
+        
+        if (typeof val === 'string') {
+            const checkVal = val.trim().toLowerCase()
+            if (checkVal.startsWith('#') || checkVal.startsWith('rgb') || checkVal.startsWith('hsl')) {
+                valColor = val.trim()
+                displayVal = val.trim().toUpperCase()
+            }
+        }
+        
+        if (isParent) {
+            displayVal = 'On'
+            valColor = '#00a8ff'
+        }
+
+        const prettyLabel = label.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim().replace(/\b\w/g, c => c.toUpperCase())
+        const safeVal = encodeURIComponent(String(val))
+        const disabledClass = ''
+        const checkedAttr = 'checked'
+        
+        return `<label class="config-switch-label ${disabledClass}" id="label-wrap-${id}" style="${indentStyle}">
+            <div style="display:flex; align-items:center;">
+                <div class="config-switch-wrap">
+                    <input type="checkbox" class="config-export-checkbox dynamic-adv-cb" data-target-id="${id}" data-dynamic-val="${safeVal}" ${parentAttr} ${checkedAttr}>
+                    <span class="config-switch-slider"></span>
+                </div>
+                <span class="config-item-name">${prettyLabel}</span>
+            </div>
+            <div class="val-scroll-wrap">
+                <span class="config-val-display" id="val-disp-${id}" style="color:${valColor};">${displayVal}</span>
+            </div>
+        </label>`
+    }
+
+    // Binds state toggling logic and select-all propagation
+    const bindDynamicCheckboxes = (container) => {
+        container.querySelectorAll('.config-export-checkbox').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                const targetId = e.target.dataset.targetId
+                const isChecked = e.target.checked
+                const labelWrap = document.getElementById(`label-wrap-${targetId}`)
+                const valDisp = document.getElementById(`val-disp-${targetId}`)
+                
+                if (labelWrap) {
+                    if (isChecked) labelWrap.classList.remove('disabled-val')
+                    else labelWrap.classList.add('disabled-val')
+                }
+                
+                if (valDisp && !e.target.hasAttribute('data-parent-id')) {
+                     valDisp.innerText = isChecked ? 'On' : 'Off'
+                     valDisp.style.color = isChecked ? '#00a8ff' : '#555'
+                }
+
+                // Gray out all children if parent toggle is modified
+                const children = document.querySelectorAll(`.config-export-checkbox[data-parent-id="${targetId}"]`)
+                children.forEach(child => {
+                    child.checked = isChecked
+                    const childWrap = document.getElementById(`label-wrap-${child.dataset.targetId}`)
+                    if (childWrap) {
+                        if (isChecked) childWrap.classList.remove('disabled-val')
+                        else childWrap.classList.add('disabled-val')
+                    }
+                })
+            })
+        })
+    }
+
+    // Scrapes DOM inputs and native JSON data to populate UI
+    function refreshConfigValues() {
+        // Process standard DOM element inputs
+        document.querySelectorAll('.config-export-checkbox:not(.dynamic-adv-cb)').forEach(cb => {
+            const targetId = cb.dataset.targetId
+            const el = document.getElementById(targetId) || document.querySelector(`[data-config-id="${targetId}"]`)
+            const valDisp = document.getElementById(`val-disp-${targetId}`)
+            const labelWrap = document.getElementById(`label-wrap-${targetId}`)
+            
+            let displayStr = '-'
+            let valColor = '#fff'
+            let hasValue = false
+            
+            if (el) {
+                if (el.tagName === 'INPUT') {
+                    if (el.type === 'checkbox') {
+                        displayStr = el.checked ? 'On' : 'Off'
+                        hasValue = true
+                    }
+                    else if (el.type === 'color') {
+                        displayStr = el.value.toUpperCase()
+                        valColor = el.value
+                        hasValue = true
+                    }
+                    else {
+                        displayStr = el.value
+                        if (displayStr !== '') hasValue = true
+                    }
+                } else if (el.tagName === 'SELECT') {
+                    displayStr = el.options[el.selectedIndex]?.text || el.value
+                    if (el.value) hasValue = true
+                } else if (el.classList.contains('active') || el.classList.contains('shadow-active') || el.classList.contains('transform-active')) {
+                    displayStr = 'On'
+                    hasValue = true
+                } else {
+                    displayStr = el.innerText || el.value || 'Off'
+                    if (displayStr !== 'Off' && displayStr !== '-' && displayStr !== '') hasValue = true
+                }
+            }
+
+            if (!hasValue || displayStr === '-' || displayStr === '') {
+                cb.checked = false
+                displayStr = '-'
+            }
+
+            if (valDisp) {
+                valDisp.innerText = displayStr
+                valDisp.title = displayStr
+                valDisp.style.color = valColor
+                
+                valDisp.classList.remove('marquee-anim')
+                valDisp.parentNode.style.justifyContent = 'flex-end'
+                
+                requestAnimationFrame(() => {
+                    // Safe boundaries force left-alignment and scrolling if value is long
+                    if (valDisp.scrollWidth > 95 || displayStr.length > 13) {
+                        valDisp.parentNode.style.justifyContent = 'flex-start'
+                        valDisp.classList.add('marquee-anim')
+                    }
+                })
+            }
+            
+            if (labelWrap) {
+                if (cb.checked) labelWrap.classList.remove('disabled-val')
+                else labelWrap.classList.add('disabled-val')
+            }
+        })
+
+        // Process global transform properties natively via buildTransformConfig
+        const advContainer = document.getElementById('dynamic-adv-transforms-container')
+        if (!advContainer) return
+
+        let advHTML = ''
+        let allNodes = []
+
+        if (typeof appLayers !== 'undefined') {
+            appLayers.forEach(layer => {
+                if (layer.objects) {
+                    layer.objects.forEach(obj => {
+                        if (obj.node) allNodes.push(obj.node)
+                    })
+                }
+            })
+        }
+
+        if (allNodes.length === 0) {
+            advContainer.innerHTML = `<div style="font-size:11px; color:#777; font-style:italic; padding:10px;">No layer objects found on the canvas.</div>`
+            return
+        }
+
+        allNodes.forEach((targetNode, index) => {
+            const innerText = typeof targetNode.findOne === 'function' ? targetNode.findOne('.inner-text') : null
+            let valStr = targetNode.name() || `Object ${index + 1}`
+            if (innerText && typeof innerText.text === 'function' && innerText.text()) valStr = innerText.text()
+
+            const tGroup = targetNode.getAttr('transformGroupName')
+            const cGroup = targetNode.getAttr('captionGroupName') || targetNode.getAttr('captionGroupId')
+            
+            let tagHTML = ''
+            let tagArray = []
+            if (tGroup) tagArray.push(`Transform Group: ${tGroup}`)
+            if (cGroup) tagArray.push(`Caption Group: ${cGroup}`)
+            if (tagArray.length > 0) {
+                tagHTML = `<div style="color:#2ecc71; font-size:10px; margin-bottom:6px; background:#222; display:inline-block; padding:2px 6px; border-radius:3px;">${tagArray.join(' | ')}</div>`
+            }
+
+            let objConfigJSON = null
+            try {
+                if (typeof buildTransformConfig === 'function') {
+                    objConfigJSON = buildTransformConfig(targetNode)
+                }
+            } catch(e) {}
+
+            if (objConfigJSON) {
+                let hasProps = false
+                let blockHTML = ''
+                let styleHTML = ''
+                const setId = `set_${objConfigJSON.id || targetNode._id || index}`
+                const styleId = `style_${objConfigJSON.id || targetNode._id || index}`
+
+                if (objConfigJSON.Blocking && Object.keys(objConfigJSON.Blocking).length > 0) {
+                    const parentId = `parent_block_${setId}`
+                    blockHTML += buildAdvHTML(parentId, 'Transform Blocking', '', true)
+                    
+                    Object.keys(objConfigJSON.Blocking).forEach(bKey => {
+                        blockHTML += buildAdvHTML(`adv_${setId}_block_${bKey}`, bKey, objConfigJSON.Blocking[bKey], false, parentId)
+                    })
+                    hasProps = true
+                }
+
+                if (objConfigJSON.Styling && Object.keys(objConfigJSON.Styling).length > 0) {
+                    const parentId = `parent_style_${styleId}`
+                    styleHTML += buildAdvHTML(parentId, 'Transform Styling', '', true)
+                    
+                    const flattenStyles = (obj, prefix = '') => {
+                        Object.keys(obj).forEach(sKey => {
+                            if (obj[sKey] !== null && typeof obj[sKey] === 'object' && !Array.isArray(obj[sKey])) {
+                                flattenStyles(obj[sKey], prefix + sKey + '_')
+                            } else {
+                                const val = obj[sKey]
+                                if (val !== null && val !== undefined) {
+                                    styleHTML += buildAdvHTML(`adv_${styleId}_style_${prefix}${sKey}`, `${prefix}${sKey}`, val, false, parentId)
+                                }
+                            }
+                        })
+                    }
+                    flattenStyles(objConfigJSON.Styling)
+                    hasProps = true
+                }
+
+                if (hasProps || tagArray.length > 0) {
+                    advHTML += `<div style="margin-bottom: 12px; padding: 10px; background: #1a252f; border: 1px solid #34495e; border-radius: 4px;">`
+                    advHTML += `<div style="font-size: 11px; color: #f1c40f; margin-bottom: 4px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Target: ${valStr}</div>`
+                    advHTML += tagHTML
+                    if (hasProps) {
+                        advHTML += `<div style="border-top: 1px dashed #444; margin-top: 4px; padding-top: 4px;">`
+                        advHTML += blockHTML + styleHTML
+                        advHTML += `</div>`
+                    }
+                    advHTML += `</div>`
+                }
+            }
+        })
+
+        if (advHTML === '') {
+            advHTML = `<div style="font-size:11px; color:#777; font-style:italic; padding:10px;">No transform properties generated.</div>`
+        }
+
+        advContainer.innerHTML = advHTML
+        bindDynamicCheckboxes(advContainer)
+        
+        // Ensure scrolling triggers on dynamically injected Advanced Transforms
+        advContainer.querySelectorAll('.val-scroll-wrap').forEach(wrap => {
+            const valDisp = wrap.querySelector('.config-val-display')
+            if (valDisp) {
+                requestAnimationFrame(() => {
+                    // Falls back to character length check if the panel width registers as 0 natively
+                    if (valDisp.scrollWidth > 95 || valDisp.innerText.length > 13) {
+                        wrap.style.justifyContent = 'flex-start'
+                        valDisp.classList.add('marquee-anim')
+                    }
+                })
+            }
+        })
+    }
+
+    // Establishes event delegation bindings
+    bindDynamicCheckboxes(configTab)
+
+    const tabBtn = document.querySelector('[data-config-id="tab-config"]')
+    if (tabBtn) tabBtn.addEventListener('click', refreshConfigValues)
+    
+    refreshConfigValues()
+
+    // Aggregates checked UI values into a JSON dictionary and triggers local download
+    document.getElementById('export-config-btn').addEventListener('click', () => {
+        const template = {
+            metadata: {
+                type: "ClipHandler_Template",
+                timestamp: new Date().toISOString()
+            },
+            settings: {}
+        }
+
+        document.querySelectorAll('.config-export-checkbox:checked').forEach(cb => {
+            const targetId = cb.dataset.targetId
+            
+            if (cb.classList.contains('dynamic-adv-cb')) {
+                let dVal = cb.dataset.dynamicVal ? decodeURIComponent(cb.dataset.dynamicVal) : ''
+                if (!isNaN(dVal) && dVal !== '') dVal = Number(dVal)
+                else if (dVal === 'true') dVal = true
+                else if (dVal === 'false') dVal = false
+                
+                if (!cb.hasAttribute('data-parent-id')) {
+                     template.settings[targetId] = true
+                } else {
+                     template.settings[targetId] = dVal
+                }
+                return
+            }
+
+            const el = document.getElementById(targetId) || document.querySelector(`[data-config-id="${targetId}"]`)
+            if (el) {
+                if (el.tagName === 'INPUT') {
+                    if (el.type === 'checkbox') template.settings[targetId] = el.checked
+                    else if (el.type === 'number' || el.type === 'range') template.settings[targetId] = Number(el.value)
+                    else template.settings[targetId] = el.value
+                } else if (el.tagName === 'SELECT') {
+                    template.settings[targetId] = el.value
+                } else if (el.classList.contains('active') || el.classList.contains('shadow-active') || el.classList.contains('transform-active')) {
+                    template.settings[targetId] = true
+                } else {
+                    template.settings[targetId] = el.innerText || el.value || false
+                }
+            }
+        })
+
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(template, null, 2))
+        const downloadAnchorNode = document.createElement('a')
+        downloadAnchorNode.setAttribute("href", dataStr)
+        downloadAnchorNode.setAttribute("download", "clip_template_" + Math.floor(Date.now() / 1000) + ".json")
+        document.body.appendChild(downloadAnchorNode)
+        downloadAnchorNode.click()
+        downloadAnchorNode.remove()
+    })
+
+    document.getElementById('import-config-btn').addEventListener('click', () => {
+        document.getElementById('config-file-input').click()
+    })
+
+    document.getElementById('config-file-input').addEventListener('change', (e) => {
+        const file = e.target.files[0]
+        if (!file) return
+        
+        const reader = new FileReader()
+        reader.onload = (event) => {
+            try {
+                const template = JSON.parse(event.target.result)
+                if (template.settings) {
+                    Object.keys(template.settings).forEach(key => {
+                        const el = document.getElementById(key) || document.querySelector(`[data-config-id="${key}"]`)
+                        if (el) {
+                            const val = template.settings[key]
+                            if (el.tagName === 'INPUT') {
+                                if (el.type === 'checkbox') el.checked = val
+                                else el.value = val
+                            } else if (el.tagName === 'SELECT') {
+                                el.value = val
+                            }
+                            el.dispatchEvent(new Event('input', { bubbles: true }))
+                            el.dispatchEvent(new Event('change', { bubbles: true }))
+                        }
+                    })
+                }
+            } catch (err) {}
+            e.target.value = ''
+        }
+        reader.readAsText(file)
+    })
+}
