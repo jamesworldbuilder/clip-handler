@@ -262,6 +262,12 @@ export function renderTimelineIntervals() {
     if (!lane) return
     
     lane.innerHTML = ''
+    
+    const oldVisibilityContainer = document.getElementById('tmarker-grp-visibility-container')
+    if (oldVisibilityContainer) {
+        oldVisibilityContainer.style.display = 'none'
+        oldVisibilityContainer.innerHTML = ''
+    }
 
     const video = document.getElementById('main-video')
     if (!activeNode || !video || !video.duration) return
@@ -275,7 +281,15 @@ export function renderTimelineIntervals() {
     const intervalBlock = document.createElement('div')
     intervalBlock.className = 'obj-interval-block'
     intervalBlock.id = 'obj-interval-block'
-    intervalBlock.style.cssText = `position:absolute; left:${startPct}%; top:0; width:${widthPct}%; height:100%; pointer-events:auto;`
+    
+    let initialTransform = ''
+    let initialZIndex = ''
+    if (window.isIntervalBlockZoomed) {
+        initialTransform = ' transform:scaleY(2.5); transform-origin:left center;'
+        initialZIndex = ' z-index:100;'
+    }
+    
+    intervalBlock.style.cssText = `position:absolute; left:${startPct}%; top:0; width:${widthPct}%; height:100%; pointer-events:auto;${initialTransform}${initialZIndex}`
 
     intervalBlock.addEventListener('mousemove', (e) => {
         if (e.target !== intervalBlock && e.target !== durationLine) {
@@ -459,6 +473,7 @@ export function renderTimelineIntervals() {
         
         const toggleMultiBtn = document.getElementById('toggle-multi-track-btn')
         const bottomControls = document.getElementById('bottom-controls')
+        const visContainer = document.getElementById('tmarker-grp-visibility-container')
 
         if (window.isIntervalBlockZoomed) {
             intervalBlock.style.transformOrigin = 'left center'
@@ -467,7 +482,12 @@ export function renderTimelineIntervals() {
             
             if (toggleMultiBtn) {
                 toggleMultiBtn.style.transition = 'margin-top 0.2s ease'
-                toggleMultiBtn.style.marginTop = '25px'
+                toggleMultiBtn.style.marginTop = '8px'
+            }
+            
+            if (visContainer) {
+                visContainer.style.transition = 'margin-top 0.2s ease'
+                visContainer.style.marginTop = '20px'
             }
             
             if (bottomControls) {
@@ -520,6 +540,11 @@ export function renderTimelineIntervals() {
             if (toggleMultiBtn) {
                 toggleMultiBtn.style.transition = 'margin-top 0.2s ease'
                 toggleMultiBtn.style.marginTop = '0px'
+            }
+            
+            if (visContainer) {
+                visContainer.style.transition = 'margin-top 0.2s ease'
+                visContainer.style.marginTop = '8px'
             }
             
             if (bottomControls) {
@@ -866,7 +891,81 @@ export function renderTimelineIntervals() {
     if (activeObj.node && activeObj.node.getAttr('transformGroupName')) {
         const tGroupData = activeObj.node.getAttr('transformGroupData')
         if (tGroupData) {
+            const tKeys = Object.keys(tGroupData)
+            
+            const tRows = document.getElementById('transforms-rows')
+            let currentActiveRowKey = null
+            if (tRows) {
+                const activeRow = Array.from(tRows.children).find(r => r.style.borderLeftColor === 'rgb(0, 168, 255)' || r.style.borderLeftColor === '#00a8ff')
+                if (activeRow) currentActiveRowKey = activeRow.dataset.transformKey
+            }
+            
+            if (currentActiveRowKey && currentActiveRowKey !== window._prevActiveRowKey) {
+                window._activeTmarkerGrp = currentActiveRowKey
+                window._forceTimelineAutoSelect = true
+            }
+            window._prevActiveRowKey = currentActiveRowKey
+            
+            if (tKeys.length > 1) {
+                if (window._activeTmarkerGrp && !tKeys.includes(window._activeTmarkerGrp)) {
+                    window._activeTmarkerGrp = null
+                }
+                if (!window._activeTmarkerGrp && tKeys.length > 0) {
+                    window._activeTmarkerGrp = tKeys[0]
+                }
+                
+                let visibilityContainer = document.getElementById('tmarker-grp-visibility-container')
+                if (!visibilityContainer) {
+                    visibilityContainer = document.createElement('div')
+                    visibilityContainer.id = 'tmarker-grp-visibility-container'
+                    
+                    const syncWrap = document.getElementById('zoom-sync-wrap')
+                    if (syncWrap) {
+                        syncWrap.parentNode.insertBefore(visibilityContainer, syncWrap.nextSibling)
+                    } else {
+                        lane.parentNode.insertBefore(visibilityContainer, lane.nextSibling)
+                    }
+                }
+                
+                const mt = window.isIntervalBlockZoomed ? '20px' : '8px'
+                visibilityContainer.style.cssText = `display:flex; gap:8px; align-items:center; padding-top:4px; margin-top:${mt}; margin-bottom:8px; width:100%;`
+                
+                tKeys.forEach((tKey, index) => {
+                    const tConfig = tGroupData[tKey]
+                    const markerColor = tConfig.markerColor || '#ffffff'
+                    const btn = document.createElement('button')
+                    btn.id = `tmarker-grp-visibility-toggle-${index + 1}`
+                    btn.className = 'tmarker-grp-visibility-toggle'
+                    btn.title = `Toggle visibility for ${tKey}`
+                    btn.style.cssText = `width:20px; height:20px; padding:0; border:1px solid ${markerColor}; border-radius:2px; display:flex; justify-content:center; align-items:center; cursor:pointer; background:transparent; transition:all 0.2s ease; box-sizing:border-box;`
+                    
+                    const isSelected = window._activeTmarkerGrp === tKey
+                    const iconColor = isSelected ? markerColor : '#aaa'
+                    
+                    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="${iconColor}" stroke-width="2" style="width:12px; height:12px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`
+                    
+                    btn.onclick = (e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        if (window._activeTmarkerGrp === tKey) {
+                            window._activeTmarkerGrp = null
+                        } else {
+                            window._activeTmarkerGrp = tKey
+                            const tRows = document.getElementById('transforms-rows')
+                            if (tRows) {
+                                const row = Array.from(tRows.children).find(r => r.dataset.transformKey === tKey)
+                                if (row) row.click()
+                            }
+                        }
+                        renderTimelineIntervals()
+                    }
+                    visibilityContainer.appendChild(btn)
+                })
+            }
+            
             Object.keys(tGroupData).forEach(tKey => {
+                if (window._activeTmarkerGrp && window._activeTmarkerGrp !== tKey) return
+                
                 const tConfig = tGroupData[tKey]
                 if (tConfig && tConfig.transformGroupData) {
                     const matrixKeys = Object.keys(tConfig.transformGroupData)
