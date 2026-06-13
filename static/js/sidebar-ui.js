@@ -2711,6 +2711,24 @@ function selectLayer(layerId) {
     renderLayersUI()
 }
 
+// Global observer for dynamic text scrolling
+if (typeof window.marqueeObserver === 'undefined') {
+    window.marqueeObserver = new ResizeObserver(entries => {
+        entries.forEach(entry => {
+            const el = entry.target;
+            if (el.scrollWidth > el.clientWidth && el.clientWidth > 0) {
+                const dist = el.clientWidth - el.scrollWidth;
+                el.style.setProperty('--name-scroll-dist', `${dist}px`);
+                if (!el.classList.contains('name-marquee-anim')) {
+                    el.classList.add('name-marquee-anim');
+                }
+            } else {
+                el.classList.remove('name-marquee-anim');
+            }
+        });
+    });
+}
+
 export function renderLayersUI() {
     const container = document.getElementById('layers-container')
     
@@ -7147,7 +7165,7 @@ export function initConfigTabBindings() {
 
     // Maps configuration categories to their respective UI property data tags
     const configCategories = {
-        "Project Layers": [], 
+        "Project Hierarchy": [], 
         "Typography & Colors": [
             { id: "edit-font-family", label: "Font Family" },
             { id: "edit-font-size", label: "Font Size" },
@@ -7176,7 +7194,6 @@ export function initConfigTabBindings() {
             { id: "edit-start-time-group", label: "Start Time" },
             { id: "edit-end-time-group", label: "End Time" }
         ],
-        "Advanced Transforms": [], 
         "Canvas & Filters": [
             { id: "edit-filter-type", label: "Filter Type" },
             { id: "dof-blur-input", label: "DOF Blur" },
@@ -7198,7 +7215,7 @@ export function initConfigTabBindings() {
 
     const switchStyles = `
     <style>
-        .config-switch-label { display:flex; align-items:center; font-size:11px; color:#ccc; cursor:pointer; justify-content:space-between; transition:0.2s; }
+        .config-switch-label { display:flex; align-items:center; font-size:11px; color:#ccc; cursor:pointer; justify-content:space-between; transition:0.2s; margin-top: 4px; }
         .config-switch-wrap { position:relative; display:inline-block; width:26px; height:14px; margin-right:8px; flex-shrink:0; }
         .config-switch-wrap input { opacity:0; width:0; height:0; }
         .config-switch-slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:#555; transition:.2s; border-radius:14px; }
@@ -7206,7 +7223,7 @@ export function initConfigTabBindings() {
         .config-switch-wrap input:checked + .config-switch-slider { background-color:#00a8ff; }
         .config-switch-wrap input:checked + .config-switch-slider:before { transform:translateX(12px); }
         
-        .val-scroll-wrap { width:95px; flex-shrink:0; overflow:hidden; display:flex; justify-content:flex-end; }
+        .val-scroll-wrap { width:75px; flex-shrink:0; overflow:hidden; display:flex; justify-content:flex-end; }
         .config-val-display { color:#fff; font-weight:bold; font-family:monospace; white-space:nowrap; display:inline-block; transition:color 0.2s; }
         .config-switch-label.disabled-val .config-val-display { color:#ffffff !important; opacity:0.6; }
         .config-switch-label.disabled-val .config-item-name { color:#666; }
@@ -7214,7 +7231,7 @@ export function initConfigTabBindings() {
         .marquee-anim { animation: marquee-scroll 4s alternate linear infinite; }
         @keyframes marquee-scroll {
             0%, 15% { transform: translateX(0); }
-            85%, 100% { transform: translateX(calc(95px - 100%)); }
+            85%, 100% { transform: translateX(calc(75px - 100%)); }
         }
 
         .name-marquee-anim { animation: name-marquee-scroll 4s alternate linear infinite; }
@@ -7222,39 +7239,41 @@ export function initConfigTabBindings() {
             0%, 15% { transform: translateX(0); }
             85%, 100% { transform: translateX(var(--name-scroll-dist, -20px)); }
         }
+        
+        .collapse-btn:hover { color:#f1c40f !important; text-decoration:underline; }
     </style>`
 
     let configUI = switchStyles + `<div id="config-export-panel" style="margin-top:0px; padding-top:0px; border-top:none;">
         <h3 style="margin-bottom:15px; color:#f39c12;">Batch Configuration</h3>
         <p style="font-size:11px; color:#aaa; margin-bottom:15px;">Select the properties to capture from the current project layout</p>
-        <div id="config-categories-wrap" style="display:flex; flex-direction:column; gap:15px; margin-bottom:20px;">`
+        <div id="config-categories-wrap" style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px;">`
 
     Object.keys(configCategories).forEach(cat => {
         configUI += `<div class="config-category">
-            <div style="font-size:12px; font-weight:bold; color:#00a8ff; margin-bottom:8px; text-transform:uppercase;">${cat}</div>
-            <div style="display:flex; flex-direction:column; gap:8px;">`
+            <div style="font-size:12px; font-weight:bold; color:#00a8ff; margin-bottom:6px; text-transform:uppercase;">${cat}</div>
+            <div style="display:flex; flex-direction:column; gap:2px;">`
         
-        if (cat === "Project Layers") {
-            configUI += `<div id="dynamic-project-layers-container"></div>`
-        } else if (cat === "Advanced Transforms") {
-            configUI += `<div id="dynamic-adv-transforms-container"></div>`
+        if (cat === "Project Hierarchy") {
+            configUI += `<div id="dynamic-project-hierarchy-container"></div>`
         } else {
             configCategories[cat].forEach(item => {
-                const indentStyle = item.parent ? 'margin-left:15px; border-left:1px solid #444; padding-left:10px; margin-top:4px;' : 'margin-top:8px;'
+                const indentStyle = item.parent ? 'margin-left:12px; border-left:1px solid #444; padding-left:8px;' : ''
                 const parentAttr = item.parent ? `data-parent-id="${item.parent}"` : ''
                 
                 configUI += `<label class="config-switch-label" id="label-wrap-${item.id}" style="${indentStyle}">
-                    <div style="display:flex; align-items:center; flex:1; min-width:0; padding-right:10px;">
-                        <div class="config-switch-wrap">
-                            <input type="checkbox" class="config-export-checkbox" data-target-id="${item.id}" ${parentAttr} checked>
-                            <span class="config-switch-slider"></span>
-                        </div>
-                        <div class="name-scroll-wrap" style="flex:1; overflow:hidden; display:flex;">
+                    <div style="display:flex; align-items:center; flex:1; min-width:0; padding-right:10px; justify-content: space-between;">
+                        <div class="name-scroll-wrap" style="overflow:hidden; display:flex; margin-right:8px;">
                             <span class="config-item-name" style="white-space:nowrap; display:inline-block;">${item.label}</span>
                         </div>
-                    </div>
-                    <div class="val-scroll-wrap">
-                        <span class="config-val-display" id="val-disp-${item.id}">-</span>
+                        <div style="display:flex; align-items:center; flex-shrink:0;">
+                            <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px;">
+                                <span class="config-val-display" id="val-disp-${item.id}">-</span>
+                            </div>
+                            <div class="config-switch-wrap" style="margin-right:0;">
+                                <input type="checkbox" class="config-export-checkbox" data-target-id="${item.id}" ${parentAttr} checked>
+                                <span class="config-switch-slider"></span>
+                            </div>
+                        </div>
                     </div>
                 </label>`
             })
@@ -7274,13 +7293,12 @@ export function initConfigTabBindings() {
     configTab.innerHTML = ''
     configTab.insertAdjacentHTML('beforeend', configUI)
 
-    // Helper to generate HTML for dynamic Advanced Transform properties
-    const buildAdvHTML = (id, label, val, isParent, parentId = '', preserveName = false) => {
-        const indentStyle = parentId ? 'margin-left:15px; border-left:1px solid #444; padding-left:10px; margin-top:6px;' : 'margin-top:8px;'
+    // Generates HTML strictly formatted with toggles on the right for dynamic components
+    const buildAdvHTML = (id, label, val, isParent, parentId = '', preserveName = false, extraHtml = '', isChecked = true) => {
+        const indentStyle = parentId ? 'margin-top:2px;' : ''
         const parentAttr = parentId ? `data-parent-id="${parentId}"` : ''
         
         const lowerLabel = label.toLowerCase()
-        
         if (lowerLabel.includes('color') || lowerLabel.includes('fill') || lowerLabel.includes('stroke') || lowerLabel.includes('shadow')) {
             if (Array.isArray(val)) {
                 if (val.length === 4) val = `rgba(${val.join(', ')})`
@@ -7298,33 +7316,38 @@ export function initConfigTabBindings() {
         if (typeof val === 'string') {
             const checkVal = val.trim().toLowerCase()
             if (checkVal.startsWith('#') || checkVal.startsWith('rgb') || checkVal.startsWith('hsl')) {
-                valColor = val.trim()
+                valColor = isChecked ? val.trim() : '#ffffff'
                 displayVal = val.trim().toUpperCase()
             }
         }
         
         if (isParent) {
-            displayVal = 'On'
-            valColor = '#00a8ff'
+            displayVal = isChecked ? 'On' : 'Off'
+            valColor = isChecked ? '#00a8ff' : '#ffffff'
         }
 
         const prettyLabel = preserveName ? label : label.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim().replace(/\b\w/g, c => c.toUpperCase())
         const safeVal = encodeURIComponent(String(val))
-        const disabledClass = ''
-        const checkedAttr = 'checked'
+        const checkedAttr = isChecked ? 'checked' : ''
+        const disabledClass = isChecked ? '' : 'disabled-val'
         
         return `<label class="config-switch-label ${disabledClass}" id="label-wrap-${id}" style="${indentStyle}">
-            <div style="display:flex; align-items:center; flex:1; min-width:0; padding-right:10px;">
-                <div class="config-switch-wrap">
-                    <input type="checkbox" class="config-export-checkbox dynamic-adv-cb" data-target-id="${id}" data-dynamic-val="${safeVal}" ${parentAttr} ${checkedAttr}>
-                    <span class="config-switch-slider"></span>
+            <div style="display:flex; align-items:center; flex:1; min-width:0; padding-right:10px; justify-content: space-between;">
+                <div style="display:flex; align-items:center; overflow:hidden;">
+                    <div class="name-scroll-wrap" style="overflow:hidden; display:flex;">
+                        <span class="config-item-name" style="white-space:nowrap; display:inline-block;">${prettyLabel}</span>
+                    </div>
+                    ${extraHtml}
                 </div>
-                <div class="name-scroll-wrap" style="flex:1; overflow:hidden; display:flex;">
-                    <span class="config-item-name" style="white-space:nowrap; display:inline-block;">${prettyLabel}</span>
+                <div style="display:flex; align-items:center; flex-shrink:0;">
+                    <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:${isParent ? 'none' : 'flex'};">
+                        <span class="config-val-display" id="val-disp-${id}" style="color:${valColor};">${displayVal}</span>
+                    </div>
+                    <div class="config-switch-wrap" style="margin-right:0;">
+                        <input type="checkbox" class="config-export-checkbox dynamic-adv-cb" data-target-id="${id}" data-dynamic-val="${safeVal}" ${parentAttr} ${checkedAttr}>
+                        <span class="config-switch-slider"></span>
+                    </div>
                 </div>
-            </div>
-            <div class="val-scroll-wrap" style="justify-content: flex-end;">
-                <span class="config-val-display" id="val-disp-${id}" style="color:${valColor};">${displayVal}</span>
             </div>
         </label>`
     }
@@ -7338,9 +7361,9 @@ export function initConfigTabBindings() {
             const nameDisp = labelWrap.querySelector('.config-item-name')
 
             requestAnimationFrame(() => {
-                if (valDisp && valWrap) {
+                if (valDisp && valWrap && valWrap.style.display !== 'none') {
                     valDisp.classList.remove('marquee-anim')
-                    if (valDisp.scrollWidth > 95 || valDisp.innerText.length > 13) {
+                    if (valDisp.scrollWidth > 75 || valDisp.innerText.length > 10) {
                         valWrap.style.justifyContent = 'flex-start'
                         valDisp.classList.add('marquee-anim')
                     } else {
@@ -7360,7 +7383,7 @@ export function initConfigTabBindings() {
         })
     }
 
-    // Binds state toggling logic and select-all propagation
+    // Binds state toggling logic and recursive select-all propagation
     const bindDynamicCheckboxes = (container) => {
         container.querySelectorAll('.config-export-checkbox').forEach(cb => {
             cb.addEventListener('change', (e) => {
@@ -7381,21 +7404,38 @@ export function initConfigTabBindings() {
                      }
                 }
 
-                const children = document.querySelectorAll(`.config-export-checkbox[data-parent-id="${targetId}"]`)
-                children.forEach(child => {
-                    child.checked = isChecked
-                    const childWrap = document.getElementById(`label-wrap-${child.dataset.targetId}`)
-                    if (childWrap) {
-                        if (isChecked) childWrap.classList.remove('disabled-val')
-                        else childWrap.classList.add('disabled-val')
-                    }
-                })
+                // Recursive function to propagate toggle state to all deep descendants
+                const cascadeToggle = (parentId, state) => {
+                    const children = document.querySelectorAll(`.config-export-checkbox[data-parent-id="${parentId}"]`)
+                    children.forEach(child => {
+                        child.checked = state
+                        const childId = child.dataset.targetId
+                        const childWrap = document.getElementById(`label-wrap-${childId}`)
+                        const cValDisp = document.getElementById(`val-disp-${childId}`)
+                        
+                        if (childWrap) {
+                            if (state) childWrap.classList.remove('disabled-val')
+                            else childWrap.classList.add('disabled-val')
+                        }
+                        if (cValDisp) {
+                             if (cValDisp.innerText === 'On' || cValDisp.innerText === 'Off' || !child.hasAttribute('data-parent-id')) {
+                                 cValDisp.innerText = state ? 'On' : 'Off'
+                                 cValDisp.style.color = state ? '#00a8ff' : '#ffffff'
+                             }
+                        }
+                        // Recurse deeper
+                        cascadeToggle(childId, state)
+                    })
+                }
+                
+                cascadeToggle(targetId, isChecked)
             })
         })
     }
 
     // Scrapes DOM inputs and native JSON data to populate UI
     function refreshConfigValues() {
+        // Process standard DOM element inputs
         document.querySelectorAll('.config-export-checkbox:not(.dynamic-adv-cb)').forEach(cb => {
             const targetId = cb.dataset.targetId
             const el = document.getElementById(targetId) || document.querySelector(`[data-config-id="${targetId}"]`)
@@ -7435,7 +7475,7 @@ export function initConfigTabBindings() {
 
             if (!hasValue || displayStr === '-' || displayStr === '') {
                 cb.checked = false
-                displayStr = '-'
+                displayStr = 'Off'
                 valColor = '#ffffff'
             }
 
@@ -7451,116 +7491,207 @@ export function initConfigTabBindings() {
             }
         })
 
-        // Process global layers dynamically and nest objects inside them
-        const layersContainer = document.getElementById('dynamic-project-layers-container')
-        if (layersContainer) {
-            let layersHTML = ''
-            if (typeof appLayers !== 'undefined' && appLayers.length > 0) {
-                const reversedLayers = [...appLayers].reverse()
+        // Process global hierarchy dynamically filtering by exact target bucket IDs
+        const hierarchyContainer = document.getElementById('dynamic-project-hierarchy-container')
+        if (hierarchyContainer) {
+            let hHTML = ''
+            const targetBuckets = ['Text', 'Image', 'Filter', 'Background']
+            
+            hHTML += `<div style="margin-bottom:6px; font-weight:bold; color:#aaa; font-size:11px; text-transform:uppercase;">Layers:</div>`
+            
+            targetBuckets.forEach(bucket => {
+                const layerId = `layer_${bucket.toLowerCase()}`
                 
-                reversedLayers.forEach(layer => {
-                    const layerId = `export_layer_${layer.id}`
-                    layersHTML += `<div style="margin-bottom: 12px; padding: 10px; background: #1a252f; border: 1px solid #34495e; border-radius: 4px;">`
-                    layersHTML += `<div style="font-size: 11px; color: #3498db; margin-bottom: 8px; font-weight: bold; text-transform: uppercase;">Layer</div>`
-                    layersHTML += buildAdvHTML(layerId, layer.name, true, true, '', true)
+                let layerObjs = []
+                if (typeof appLayers !== 'undefined') {
+                    appLayers.forEach(layer => {
+                        if (layer.name && layer.name.toLowerCase().includes(bucket.toLowerCase())) {
+                            if (layer.objects) layerObjs.push(...layer.objects)
+                        } else if (layer.type && layer.type.toLowerCase().includes(bucket.toLowerCase())) {
+                            if (layer.objects) layerObjs.push(...layer.objects)
+                        }
+                    })
+                }
+
+                const layerExists = layerObjs.length > 0
+                const collapseId = `collapse_${layerId}`
+                const btnText = layerExists ? '(hide)' : '(show)'
+                const layerMetricsBtn = `<button class="collapse-btn" data-target="${collapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">${btnText}</button>`
+
+                hHTML += `<div id="${bucket.toLowerCase()}-layer-toggles" style="margin-bottom: 8px; padding: 6px 8px; background: #1a252f; border: 1px solid #34495e; border-radius: 4px;">`
+                hHTML += buildAdvHTML(layerId, `${bucket} Layer`, true, true, '', true, layerMetricsBtn, layerExists)
+                
+                hHTML += `<div id="${collapseId}" style="display:${layerExists ? 'block' : 'none'}; margin-top: 4px; margin-left: 8px; padding-left: 12px; border-left: 1px solid #34495e;">`
+                
+                if (bucket === 'Background') {
+                    const rawVideoId = `${layerId}_rawvideo`
+                    hHTML += buildAdvHTML(rawVideoId, `"Raw Video"`, true, true, layerId, true, '', layerExists)
+                } else {
+                    const cGroups = {}
+                    const tGroups = {}
+                    const indObjs = []
                     
-                    if (layer.objects && layer.objects.length > 0) {
-                        layersHTML += `<div style="margin-top: 10px; padding-left: 10px; border-left: 2px solid #2c3e50;">`
-                        const reversedObjects = [...layer.objects].reverse()
-                        reversedObjects.forEach(obj => {
-                            const objId = `export_obj_${obj.id}`
-                            layersHTML += buildAdvHTML(objId, obj.name, true, true, layerId, true)
-                        })
-                        layersHTML += `</div>`
-                    }
-                    layersHTML += `</div>`
-                })
-            } else {
-                layersHTML = `<div style="font-size:11px; color:#777; font-style:italic; padding:10px;">No layers found on the canvas.</div>`
-            }
-            
-            layersContainer.innerHTML = layersHTML
-            bindDynamicCheckboxes(layersContainer)
-        }
+                    layerObjs.forEach(obj => {
+                        if (!obj || !obj.node) return
+                        const tGroup = obj.node.getAttr('transformGroupName')
+                        const cGroup = obj.node.getAttr('captionsGroupName') || obj.node.getAttr('captionGroupId')
+                        
+                        if (cGroup) {
+                            if (!cGroups[cGroup]) cGroups[cGroup] = []
+                            cGroups[cGroup].push(obj)
+                        } else if (tGroup) {
+                            if (!tGroups[tGroup]) tGroups[tGroup] = []
+                            tGroups[tGroup].push(obj)
+                        } else {
+                            indObjs.push(obj)
+                        }
+                    })
 
-        // Process global transform properties natively structured by Layer -> Object
-        const advContainer = document.getElementById('dynamic-adv-transforms-container')
-        if (advContainer) {
-            let advHTML = ''
-            
-            if (typeof appLayers !== 'undefined' && appLayers.length > 0) {
-                const reversedLayers = [...appLayers].reverse()
+                    // Independent Objects Assembly
+                    if (indObjs.length > 0) {
+                        const typeId = `${layerId}_ind`
+                        hHTML += buildAdvHTML(typeId, `${bucket} Objects`, true, true, layerId, true, '', layerExists)
+                        hHTML += `<div style="margin-top: 2px; margin-left: 8px; padding-left: 12px; border-left: 1px dashed #444; margin-bottom: 8px;">`
+                        indObjs.forEach(obj => {
+                            const objId = `obj_${obj.id || obj.node._id}`
+                            let valStr = obj.name || obj.node.name() || `Object`
+                            const innerText = typeof obj.node.findOne === 'function' ? obj.node.findOne('.inner-text') : null
+                            if (innerText && typeof innerText.text === 'function' && innerText.text()) valStr = innerText.text()
+                            
+                            hHTML += buildAdvHTML(objId, `"${valStr}"`, true, true, typeId, true, '', layerExists)
+                            hHTML += `<div style="margin-left: 8px; padding-left: 12px; color:#aaa; font-family:monospace; font-size:10px; margin-top:2px;">{}</div>`
+                        })
+                        hHTML += `</div>`
+                    }
+
+                    // Groups Assembly
+                    const groupsId = `${layerId}_groups`
+                    const hasGroups = Object.keys(cGroups).length > 0 || Object.keys(tGroups).length > 0
+                    hHTML += buildAdvHTML(groupsId, `Groups`, true, true, layerId, true, '', hasGroups)
+                    hHTML += `<div style="margin-top: 2px; margin-left: 8px; padding-left: 12px; border-left: 1px solid #34495e;">`
+
+                    // Caption Groups Assembly
+                    const cgContainerId = `${groupsId}_cg`
+                    const hasCGroups = Object.keys(cGroups).length > 0
+                    hHTML += buildAdvHTML(cgContainerId, `Caption Groups`, true, true, groupsId, true, '', hasCGroups)
+                    hHTML += `<div style="margin-top: 2px; margin-left: 8px; padding-left: 12px; border-left: 1px dashed #444; margin-bottom: 8px;">`
+                    
+                    if (hasCGroups) {
+                        Object.keys(cGroups).forEach(cgName => {
+                            const cgId = `cg_${cgName.replace(/\W/g, '')}`
+                            const cgCollapseId = `collapse_${cgId}`
+                            
+                            let totalCaps = 0
+                            cGroups[cgName].forEach(obj => {
+                                const capList = obj.node.getAttr('captionsList') || obj.node.getAttr('captionData') || []
+                                totalCaps += capList.length || 1
+                            })
+
+                            const metricsBtn = `<button class="collapse-btn" data-target="${cgCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">(show)</button>`
+                            hHTML += buildAdvHTML(cgId, `"${cgName}"`, true, true, cgContainerId, true, metricsBtn, true)
+                            
+                            hHTML += `<div id="${cgCollapseId}" style="display:none; margin-left: 8px; padding-left: 12px; color:#aaa; font-family:monospace; font-size:10px; margin-top:2px; margin-bottom:4px;">`
+                            hHTML += `<div style="margin-bottom:4px;">Total Captions: <span style="color:#2ecc71;">${totalCaps}</span></div>`
+                            
+                            cGroups[cgName].forEach(obj => {
+                                const objId = `obj_${obj.id || obj.node._id}`
+                                let valStr = obj.name || obj.node.name() || `Object`
+                                
+                                const capList = obj.node.getAttr('captionsList') || obj.node.getAttr('captionData') || []
+                                const capCollapseId = `collapse_cap_${objId}`
+                                const capBtn = `<button class="collapse-btn" data-target="${capCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">(show)</button>`
+                                
+                                hHTML += buildAdvHTML(objId, `"${valStr}"`, true, true, cgId, true, '', true)
+                                hHTML += `<div style="margin-left:8px; padding-left:12px; margin-top:2px;">`
+                                hHTML += `<div style="margin-bottom:2px;">"cap_cnt": [${capList.length}] ${capBtn}</div>`
+                                hHTML += `<div id="${capCollapseId}" style="display:none; margin-left:8px; padding-left:12px; border-left:1px solid #555; color:#2ecc71;">`
+                                capList.forEach(cap => hHTML += `<div style="margin-top:2px;">- "${cap}"</div>`)
+                                hHTML += `</div></div>`
+                            })
+                            hHTML += `</div>`
+                        })
+                    } else {
+                        hHTML += `<div style="font-size:10px; color:#777; font-style:italic; padding-left:8px; margin-bottom:2px;">No caption groups</div>`
+                    }
+                    hHTML += `</div>`
+
+                    // Transform Groups Assembly
+                    const tgContainerId = `${groupsId}_tg`
+                    const hasTGroups = Object.keys(tGroups).length > 0
+                    hHTML += buildAdvHTML(tgContainerId, `Transform Groups`, true, true, groupsId, true, '', hasTGroups)
+                    hHTML += `<div style="margin-top: 2px; margin-left: 8px; padding-left: 12px; border-left: 1px dashed #444;">`
+                    
+                    if (hasTGroups) {
+                        Object.keys(tGroups).forEach(tgName => {
+                            const tgId = `tg_${tgName.replace(/\W/g, '')}`
+                            const tgCollapseId = `collapse_${tgId}`
+                            
+                            const objCnt = tGroups[tgName].length
+                            let elmTtl = 0
+                            tGroups[tgName].forEach(obj => {
+                                const fullData = obj.node.getAttr('transformGroupData') || {}
+                                let valStr = obj.name || obj.node.name() || `Object`
+                                const innerText = typeof obj.node.findOne === 'function' ? obj.node.findOne('.inner-text') : null
+                                if (innerText && typeof innerText.text === 'function' && innerText.text()) valStr = innerText.text()
+                                let tData = null
+                                if (fullData[valStr] && fullData[valStr].transformGroupData) tData = fullData[valStr].transformGroupData
+                                else if (Object.keys(fullData).some(k => !isNaN(k))) tData = fullData
+                                if (tData) elmTtl += Object.keys(tData).filter(k => !isNaN(k)).length
+                            })
+
+                            const metricsBtn = `<button class="collapse-btn" data-target="${tgCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">(show)</button>`
+                            hHTML += buildAdvHTML(tgId, `"${tgName}"`, true, true, tgContainerId, true, metricsBtn, true)
+                            
+                            hHTML += `<div id="${tgCollapseId}" style="display:none; margin-left: 8px; padding-left: 12px; color:#aaa; font-family:monospace; font-size:10px; margin-top:2px; margin-bottom:4px;">`
+                            hHTML += `<div style="margin-bottom:4px;">"obj_cnt": [${objCnt}], "elm_ttl": [${elmTtl}]</div>`
+                            
+                            tGroups[tgName].forEach(obj => {
+                                const targetNode = obj.node
+                                const objId = `obj_${obj.id || targetNode._id}`
+                                let valStr = obj.name || targetNode.name() || `Object`
+                                const innerText = typeof targetNode.findOne === 'function' ? targetNode.findOne('.inner-text') : null
+                                if (innerText && typeof innerText.text === 'function' && innerText.text()) valStr = innerText.text()
+                                
+                                const fullData = targetNode.getAttr('transformGroupData') || {}
+                                let tData = null
+                                if (fullData[valStr] && fullData[valStr].transformGroupData) tData = fullData[valStr].transformGroupData
+                                else if (Object.keys(fullData).some(k => !isNaN(k))) tData = fullData
+                                const elmCnt = tData ? Object.keys(tData).filter(k => !isNaN(k)).length : 0
+
+                                hHTML += buildAdvHTML(objId, `"${valStr}"`, true, true, tgId, true, '', true)
+                                hHTML += `<div style="margin-left: 8px; padding-left: 12px; border-left: 1px solid #555; margin-top:2px;">"elm_cnt": [${elmCnt}]</div>`
+                            })
+                            hHTML += `</div>`
+                        })
+                    } else {
+                        hHTML += `<div style="font-size:10px; color:#777; font-style:italic; padding-left:8px; margin-bottom:2px;">No transform groups</div>`
+                    }
+                    hHTML += `</div>` // close Transform Groups
+
+                    hHTML += `</div>` // close Groups
+                }
                 
-                reversedLayers.forEach(layer => {
-                    let layerHasProps = false
-                    let layerHTML = `<div style="margin-bottom: 15px; padding: 10px; background: #1a252f; border: 1px solid #34495e; border-radius: 4px;">`
-                    layerHTML += `<div style="font-size: 12px; color: #3498db; margin-bottom: 8px; font-weight: bold;">LAYER: ${layer.name}</div>`
+                hHTML += `</div>` // close Layer collapse container
+                hHTML += `</div>` // close Layer card
+            })
 
-                    if (layer.objects && layer.objects.length > 0) {
-                        const reversedObjects = [...layer.objects].reverse()
-                        reversedObjects.forEach(obj => {
-                            const targetNode = obj.node
-                            let valStr = obj.name || targetNode.name() || `Object`
+            hierarchyContainer.innerHTML = hHTML
 
-                            let objConfigJSON = null
-                            try { if (typeof buildTransformConfig === 'function') objConfigJSON = buildTransformConfig(targetNode) } catch(e) {}
-
-                            if (objConfigJSON) {
-                                let hasProps = false
-                                let blockHTML = ''
-                                let styleHTML = ''
-                                const setId = `set_${objConfigJSON.id || targetNode._id || obj.id}`
-                                const styleId = `style_${objConfigJSON.id || targetNode._id || obj.id}`
-
-                                if (objConfigJSON.Blocking && Object.keys(objConfigJSON.Blocking).length > 0) {
-                                    const parentId = `parent_block_${setId}`
-                                    blockHTML += buildAdvHTML(parentId, 'Transform Blocking', '', true)
-                                    Object.keys(objConfigJSON.Blocking).forEach(bKey => {
-                                        blockHTML += buildAdvHTML(`adv_${setId}_block_${bKey}`, bKey, objConfigJSON.Blocking[bKey], false, parentId)
-                                    })
-                                    hasProps = true
-                                }
-
-                                if (objConfigJSON.Styling && Object.keys(objConfigJSON.Styling).length > 0) {
-                                    const parentId = `parent_style_${styleId}`
-                                    styleHTML += buildAdvHTML(parentId, 'Transform Styling', '', true)
-                                    const flattenStyles = (obj, prefix = '') => {
-                                        Object.keys(obj).forEach(sKey => {
-                                            if (obj[sKey] !== null && typeof obj[sKey] === 'object' && !Array.isArray(obj[sKey])) {
-                                                flattenStyles(obj[sKey], prefix + sKey + '_')
-                                            } else {
-                                                const val = obj[sKey]
-                                                if (val !== null && val !== undefined) {
-                                                    styleHTML += buildAdvHTML(`adv_${styleId}_style_${prefix}${sKey}`, `${prefix}${sKey}`, val, false, parentId)
-                                                }
-                                            }
-                                        })
-                                    }
-                                    flattenStyles(objConfigJSON.Styling)
-                                    hasProps = true
-                                }
-
-                                if (hasProps) {
-                                    layerHTML += `<div style="margin-top: 10px; padding-left: 10px; border-left: 2px solid #2c3e50; padding-bottom: 6px;">`
-                                    layerHTML += `<div style="font-size: 11px; color: #f1c40f; margin-bottom: 6px; font-weight: bold;">OBJECT: ${valStr}</div>`
-                                    layerHTML += blockHTML + styleHTML
-                                    layerHTML += `</div>`
-                                    layerHasProps = true
-                                }
-                            }
-                        })
+            // Activates native show/hide payload mechanics without interfering with global DOM
+            hierarchyContainer.querySelectorAll('.collapse-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    const targetEl = document.getElementById(btn.dataset.target)
+                    if (targetEl) {
+                        const isHidden = targetEl.style.display === 'none'
+                        targetEl.style.display = isHidden ? 'block' : 'none'
+                        btn.innerText = isHidden ? '(hide)' : '(show)'
                     }
-                    layerHTML += `</div>`
-                    if (layerHasProps) advHTML += layerHTML
-                })
-            }
+                }
+            })
 
-            if (advHTML === '') {
-                advHTML = `<div style="font-size:11px; color:#777; font-style:italic; padding:10px;">No transform properties generated.</div>`
-            }
-
-            advContainer.innerHTML = advHTML
-            bindDynamicCheckboxes(advContainer)
+            bindDynamicCheckboxes(hierarchyContainer)
         }
 
         applyMarqueeEffects(configTab)
