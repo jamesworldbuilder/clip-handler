@@ -7147,6 +7147,7 @@ export function initConfigTabBindings() {
 
     // Maps configuration categories to their respective UI property data tags
     const configCategories = {
+        "Project Layers": [], 
         "Typography & Colors": [
             { id: "edit-font-family", label: "Font Family" },
             { id: "edit-font-size", label: "Font Size" },
@@ -7205,15 +7206,21 @@ export function initConfigTabBindings() {
         .config-switch-wrap input:checked + .config-switch-slider { background-color:#00a8ff; }
         .config-switch-wrap input:checked + .config-switch-slider:before { transform:translateX(12px); }
         
-        .val-scroll-wrap { width:95px; overflow:hidden; display:flex; justify-content:flex-end; }
+        .val-scroll-wrap { width:95px; flex-shrink:0; overflow:hidden; display:flex; justify-content:flex-end; }
         .config-val-display { color:#fff; font-weight:bold; font-family:monospace; white-space:nowrap; display:inline-block; transition:color 0.2s; }
-        .config-switch-label.disabled-val .config-val-display { color:#555 !important; text-decoration:line-through; opacity:0.5; }
+        .config-switch-label.disabled-val .config-val-display { color:#ffffff !important; opacity:0.6; }
         .config-switch-label.disabled-val .config-item-name { color:#666; }
         
         .marquee-anim { animation: marquee-scroll 4s alternate linear infinite; }
         @keyframes marquee-scroll {
             0%, 15% { transform: translateX(0); }
             85%, 100% { transform: translateX(calc(95px - 100%)); }
+        }
+
+        .name-marquee-anim { animation: name-marquee-scroll 4s alternate linear infinite; }
+        @keyframes name-marquee-scroll {
+            0%, 15% { transform: translateX(0); }
+            85%, 100% { transform: translateX(var(--name-scroll-dist, -20px)); }
         }
     </style>`
 
@@ -7227,17 +7234,24 @@ export function initConfigTabBindings() {
             <div style="font-size:12px; font-weight:bold; color:#00a8ff; margin-bottom:8px; text-transform:uppercase;">${cat}</div>
             <div style="display:flex; flex-direction:column; gap:8px;">`
         
-        if (cat === "Advanced Transforms") {
+        if (cat === "Project Layers") {
+            configUI += `<div id="dynamic-project-layers-container"></div>`
+        } else if (cat === "Advanced Transforms") {
             configUI += `<div id="dynamic-adv-transforms-container"></div>`
         } else {
             configCategories[cat].forEach(item => {
-                configUI += `<label class="config-switch-label" id="label-wrap-${item.id}">
-                    <div style="display:flex; align-items:center;">
+                const indentStyle = item.parent ? 'margin-left:15px; border-left:1px solid #444; padding-left:10px; margin-top:4px;' : 'margin-top:8px;'
+                const parentAttr = item.parent ? `data-parent-id="${item.parent}"` : ''
+                
+                configUI += `<label class="config-switch-label" id="label-wrap-${item.id}" style="${indentStyle}">
+                    <div style="display:flex; align-items:center; flex:1; min-width:0; padding-right:10px;">
                         <div class="config-switch-wrap">
-                            <input type="checkbox" class="config-export-checkbox" data-target-id="${item.id}" checked>
+                            <input type="checkbox" class="config-export-checkbox" data-target-id="${item.id}" ${parentAttr} checked>
                             <span class="config-switch-slider"></span>
                         </div>
-                        <span class="config-item-name">${item.label}</span>
+                        <div class="name-scroll-wrap" style="flex:1; overflow:hidden; display:flex;">
+                            <span class="config-item-name" style="white-space:nowrap; display:inline-block;">${item.label}</span>
+                        </div>
                     </div>
                     <div class="val-scroll-wrap">
                         <span class="config-val-display" id="val-disp-${item.id}">-</span>
@@ -7261,7 +7275,7 @@ export function initConfigTabBindings() {
     configTab.insertAdjacentHTML('beforeend', configUI)
 
     // Helper to generate HTML for dynamic Advanced Transform properties
-    const buildAdvHTML = (id, label, val, isParent, parentId = '') => {
+    const buildAdvHTML = (id, label, val, isParent, parentId = '', preserveName = false) => {
         const indentStyle = parentId ? 'margin-left:15px; border-left:1px solid #444; padding-left:10px; margin-top:6px;' : 'margin-top:8px;'
         const parentAttr = parentId ? `data-parent-id="${parentId}"` : ''
         
@@ -7279,7 +7293,7 @@ export function initConfigTabBindings() {
         }
 
         let displayVal = val === '' || val === null || val === undefined ? '-' : String(val)
-        let valColor = '#fff'
+        let valColor = '#ffffff'
         
         if (typeof val === 'string') {
             const checkVal = val.trim().toLowerCase()
@@ -7294,23 +7308,56 @@ export function initConfigTabBindings() {
             valColor = '#00a8ff'
         }
 
-        const prettyLabel = label.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim().replace(/\b\w/g, c => c.toUpperCase())
+        const prettyLabel = preserveName ? label : label.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim().replace(/\b\w/g, c => c.toUpperCase())
         const safeVal = encodeURIComponent(String(val))
         const disabledClass = ''
         const checkedAttr = 'checked'
         
         return `<label class="config-switch-label ${disabledClass}" id="label-wrap-${id}" style="${indentStyle}">
-            <div style="display:flex; align-items:center;">
+            <div style="display:flex; align-items:center; flex:1; min-width:0; padding-right:10px;">
                 <div class="config-switch-wrap">
                     <input type="checkbox" class="config-export-checkbox dynamic-adv-cb" data-target-id="${id}" data-dynamic-val="${safeVal}" ${parentAttr} ${checkedAttr}>
                     <span class="config-switch-slider"></span>
                 </div>
-                <span class="config-item-name">${prettyLabel}</span>
+                <div class="name-scroll-wrap" style="flex:1; overflow:hidden; display:flex;">
+                    <span class="config-item-name" style="white-space:nowrap; display:inline-block;">${prettyLabel}</span>
+                </div>
             </div>
-            <div class="val-scroll-wrap">
+            <div class="val-scroll-wrap" style="justify-content: flex-end;">
                 <span class="config-val-display" id="val-disp-${id}" style="color:${valColor};">${displayVal}</span>
             </div>
         </label>`
+    }
+
+    // Scans available UI bounds and maps appropriate scrolling animations
+    const applyMarqueeEffects = (container) => {
+        container.querySelectorAll('.config-switch-label').forEach(labelWrap => {
+            const valWrap = labelWrap.querySelector('.val-scroll-wrap')
+            const valDisp = labelWrap.querySelector('.config-val-display')
+            const nameWrap = labelWrap.querySelector('.name-scroll-wrap')
+            const nameDisp = labelWrap.querySelector('.config-item-name')
+
+            requestAnimationFrame(() => {
+                if (valDisp && valWrap) {
+                    valDisp.classList.remove('marquee-anim')
+                    if (valDisp.scrollWidth > 95 || valDisp.innerText.length > 13) {
+                        valWrap.style.justifyContent = 'flex-start'
+                        valDisp.classList.add('marquee-anim')
+                    } else {
+                        valWrap.style.justifyContent = 'flex-end'
+                    }
+                }
+
+                if (nameDisp && nameWrap) {
+                    nameDisp.classList.remove('name-marquee-anim')
+                    if (nameDisp.scrollWidth > nameWrap.clientWidth && nameWrap.clientWidth > 0) {
+                        const dist = nameWrap.clientWidth - nameDisp.scrollWidth
+                        nameDisp.style.setProperty('--name-scroll-dist', `${dist}px`)
+                        nameDisp.classList.add('name-marquee-anim')
+                    }
+                }
+            })
+        })
     }
 
     // Binds state toggling logic and select-all propagation
@@ -7327,12 +7374,13 @@ export function initConfigTabBindings() {
                     else labelWrap.classList.add('disabled-val')
                 }
                 
-                if (valDisp && !e.target.hasAttribute('data-parent-id')) {
-                     valDisp.innerText = isChecked ? 'On' : 'Off'
-                     valDisp.style.color = isChecked ? '#00a8ff' : '#555'
+                if (valDisp) {
+                     if (valDisp.innerText === 'On' || valDisp.innerText === 'Off' || !e.target.hasAttribute('data-parent-id')) {
+                         valDisp.innerText = isChecked ? 'On' : 'Off'
+                         valDisp.style.color = isChecked ? '#00a8ff' : '#ffffff'
+                     }
                 }
 
-                // Gray out all children if parent toggle is modified
                 const children = document.querySelectorAll(`.config-export-checkbox[data-parent-id="${targetId}"]`)
                 children.forEach(child => {
                     child.checked = isChecked
@@ -7348,7 +7396,6 @@ export function initConfigTabBindings() {
 
     // Scrapes DOM inputs and native JSON data to populate UI
     function refreshConfigValues() {
-        // Process standard DOM element inputs
         document.querySelectorAll('.config-export-checkbox:not(.dynamic-adv-cb)').forEach(cb => {
             const targetId = cb.dataset.targetId
             const el = document.getElementById(targetId) || document.querySelector(`[data-config-id="${targetId}"]`)
@@ -7356,7 +7403,7 @@ export function initConfigTabBindings() {
             const labelWrap = document.getElementById(`label-wrap-${targetId}`)
             
             let displayStr = '-'
-            let valColor = '#fff'
+            let valColor = '#ffffff'
             let hasValue = false
             
             if (el) {
@@ -7389,23 +7436,13 @@ export function initConfigTabBindings() {
             if (!hasValue || displayStr === '-' || displayStr === '') {
                 cb.checked = false
                 displayStr = '-'
+                valColor = '#ffffff'
             }
 
             if (valDisp) {
                 valDisp.innerText = displayStr
                 valDisp.title = displayStr
                 valDisp.style.color = valColor
-                
-                valDisp.classList.remove('marquee-anim')
-                valDisp.parentNode.style.justifyContent = 'flex-end'
-                
-                requestAnimationFrame(() => {
-                    // Safe boundaries force left-alignment and scrolling if value is long
-                    if (valDisp.scrollWidth > 95 || displayStr.length > 13) {
-                        valDisp.parentNode.style.justifyContent = 'flex-start'
-                        valDisp.classList.add('marquee-anim')
-                    }
-                })
             }
             
             if (labelWrap) {
@@ -7414,122 +7451,119 @@ export function initConfigTabBindings() {
             }
         })
 
-        // Process global transform properties natively via buildTransformConfig
-        const advContainer = document.getElementById('dynamic-adv-transforms-container')
-        if (!advContainer) return
-
-        let advHTML = ''
-        let allNodes = []
-
-        if (typeof appLayers !== 'undefined') {
-            appLayers.forEach(layer => {
-                if (layer.objects) {
-                    layer.objects.forEach(obj => {
-                        if (obj.node) allNodes.push(obj.node)
-                    })
-                }
-            })
-        }
-
-        if (allNodes.length === 0) {
-            advContainer.innerHTML = `<div style="font-size:11px; color:#777; font-style:italic; padding:10px;">No layer objects found on the canvas.</div>`
-            return
-        }
-
-        allNodes.forEach((targetNode, index) => {
-            const innerText = typeof targetNode.findOne === 'function' ? targetNode.findOne('.inner-text') : null
-            let valStr = targetNode.name() || `Object ${index + 1}`
-            if (innerText && typeof innerText.text === 'function' && innerText.text()) valStr = innerText.text()
-
-            const tGroup = targetNode.getAttr('transformGroupName')
-            const cGroup = targetNode.getAttr('captionGroupName') || targetNode.getAttr('captionGroupId')
-            
-            let tagHTML = ''
-            let tagArray = []
-            if (tGroup) tagArray.push(`Transform Group: ${tGroup}`)
-            if (cGroup) tagArray.push(`Caption Group: ${cGroup}`)
-            if (tagArray.length > 0) {
-                tagHTML = `<div style="color:#2ecc71; font-size:10px; margin-bottom:6px; background:#222; display:inline-block; padding:2px 6px; border-radius:3px;">${tagArray.join(' | ')}</div>`
+        // Process global layers dynamically and nest objects inside them
+        const layersContainer = document.getElementById('dynamic-project-layers-container')
+        if (layersContainer) {
+            let layersHTML = ''
+            if (typeof appLayers !== 'undefined' && appLayers.length > 0) {
+                const reversedLayers = [...appLayers].reverse()
+                
+                reversedLayers.forEach(layer => {
+                    const layerId = `export_layer_${layer.id}`
+                    layersHTML += `<div style="margin-bottom: 12px; padding: 10px; background: #1a252f; border: 1px solid #34495e; border-radius: 4px;">`
+                    layersHTML += `<div style="font-size: 11px; color: #3498db; margin-bottom: 8px; font-weight: bold; text-transform: uppercase;">Layer</div>`
+                    layersHTML += buildAdvHTML(layerId, layer.name, true, true, '', true)
+                    
+                    if (layer.objects && layer.objects.length > 0) {
+                        layersHTML += `<div style="margin-top: 10px; padding-left: 10px; border-left: 2px solid #2c3e50;">`
+                        const reversedObjects = [...layer.objects].reverse()
+                        reversedObjects.forEach(obj => {
+                            const objId = `export_obj_${obj.id}`
+                            layersHTML += buildAdvHTML(objId, obj.name, true, true, layerId, true)
+                        })
+                        layersHTML += `</div>`
+                    }
+                    layersHTML += `</div>`
+                })
+            } else {
+                layersHTML = `<div style="font-size:11px; color:#777; font-style:italic; padding:10px;">No layers found on the canvas.</div>`
             }
+            
+            layersContainer.innerHTML = layersHTML
+            bindDynamicCheckboxes(layersContainer)
+        }
 
-            let objConfigJSON = null
-            try {
-                if (typeof buildTransformConfig === 'function') {
-                    objConfigJSON = buildTransformConfig(targetNode)
-                }
-            } catch(e) {}
+        // Process global transform properties natively structured by Layer -> Object
+        const advContainer = document.getElementById('dynamic-adv-transforms-container')
+        if (advContainer) {
+            let advHTML = ''
+            
+            if (typeof appLayers !== 'undefined' && appLayers.length > 0) {
+                const reversedLayers = [...appLayers].reverse()
+                
+                reversedLayers.forEach(layer => {
+                    let layerHasProps = false
+                    let layerHTML = `<div style="margin-bottom: 15px; padding: 10px; background: #1a252f; border: 1px solid #34495e; border-radius: 4px;">`
+                    layerHTML += `<div style="font-size: 12px; color: #3498db; margin-bottom: 8px; font-weight: bold;">LAYER: ${layer.name}</div>`
 
-            if (objConfigJSON) {
-                let hasProps = false
-                let blockHTML = ''
-                let styleHTML = ''
-                const setId = `set_${objConfigJSON.id || targetNode._id || index}`
-                const styleId = `style_${objConfigJSON.id || targetNode._id || index}`
+                    if (layer.objects && layer.objects.length > 0) {
+                        const reversedObjects = [...layer.objects].reverse()
+                        reversedObjects.forEach(obj => {
+                            const targetNode = obj.node
+                            let valStr = obj.name || targetNode.name() || `Object`
 
-                if (objConfigJSON.Blocking && Object.keys(objConfigJSON.Blocking).length > 0) {
-                    const parentId = `parent_block_${setId}`
-                    blockHTML += buildAdvHTML(parentId, 'Transform Blocking', '', true)
-                    
-                    Object.keys(objConfigJSON.Blocking).forEach(bKey => {
-                        blockHTML += buildAdvHTML(`adv_${setId}_block_${bKey}`, bKey, objConfigJSON.Blocking[bKey], false, parentId)
-                    })
-                    hasProps = true
-                }
+                            let objConfigJSON = null
+                            try { if (typeof buildTransformConfig === 'function') objConfigJSON = buildTransformConfig(targetNode) } catch(e) {}
 
-                if (objConfigJSON.Styling && Object.keys(objConfigJSON.Styling).length > 0) {
-                    const parentId = `parent_style_${styleId}`
-                    styleHTML += buildAdvHTML(parentId, 'Transform Styling', '', true)
-                    
-                    const flattenStyles = (obj, prefix = '') => {
-                        Object.keys(obj).forEach(sKey => {
-                            if (obj[sKey] !== null && typeof obj[sKey] === 'object' && !Array.isArray(obj[sKey])) {
-                                flattenStyles(obj[sKey], prefix + sKey + '_')
-                            } else {
-                                const val = obj[sKey]
-                                if (val !== null && val !== undefined) {
-                                    styleHTML += buildAdvHTML(`adv_${styleId}_style_${prefix}${sKey}`, `${prefix}${sKey}`, val, false, parentId)
+                            if (objConfigJSON) {
+                                let hasProps = false
+                                let blockHTML = ''
+                                let styleHTML = ''
+                                const setId = `set_${objConfigJSON.id || targetNode._id || obj.id}`
+                                const styleId = `style_${objConfigJSON.id || targetNode._id || obj.id}`
+
+                                if (objConfigJSON.Blocking && Object.keys(objConfigJSON.Blocking).length > 0) {
+                                    const parentId = `parent_block_${setId}`
+                                    blockHTML += buildAdvHTML(parentId, 'Transform Blocking', '', true)
+                                    Object.keys(objConfigJSON.Blocking).forEach(bKey => {
+                                        blockHTML += buildAdvHTML(`adv_${setId}_block_${bKey}`, bKey, objConfigJSON.Blocking[bKey], false, parentId)
+                                    })
+                                    hasProps = true
+                                }
+
+                                if (objConfigJSON.Styling && Object.keys(objConfigJSON.Styling).length > 0) {
+                                    const parentId = `parent_style_${styleId}`
+                                    styleHTML += buildAdvHTML(parentId, 'Transform Styling', '', true)
+                                    const flattenStyles = (obj, prefix = '') => {
+                                        Object.keys(obj).forEach(sKey => {
+                                            if (obj[sKey] !== null && typeof obj[sKey] === 'object' && !Array.isArray(obj[sKey])) {
+                                                flattenStyles(obj[sKey], prefix + sKey + '_')
+                                            } else {
+                                                const val = obj[sKey]
+                                                if (val !== null && val !== undefined) {
+                                                    styleHTML += buildAdvHTML(`adv_${styleId}_style_${prefix}${sKey}`, `${prefix}${sKey}`, val, false, parentId)
+                                                }
+                                            }
+                                        })
+                                    }
+                                    flattenStyles(objConfigJSON.Styling)
+                                    hasProps = true
+                                }
+
+                                if (hasProps) {
+                                    layerHTML += `<div style="margin-top: 10px; padding-left: 10px; border-left: 2px solid #2c3e50; padding-bottom: 6px;">`
+                                    layerHTML += `<div style="font-size: 11px; color: #f1c40f; margin-bottom: 6px; font-weight: bold;">OBJECT: ${valStr}</div>`
+                                    layerHTML += blockHTML + styleHTML
+                                    layerHTML += `</div>`
+                                    layerHasProps = true
                                 }
                             }
                         })
                     }
-                    flattenStyles(objConfigJSON.Styling)
-                    hasProps = true
-                }
-
-                if (hasProps || tagArray.length > 0) {
-                    advHTML += `<div style="margin-bottom: 12px; padding: 10px; background: #1a252f; border: 1px solid #34495e; border-radius: 4px;">`
-                    advHTML += `<div style="font-size: 11px; color: #f1c40f; margin-bottom: 4px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Target: ${valStr}</div>`
-                    advHTML += tagHTML
-                    if (hasProps) {
-                        advHTML += `<div style="border-top: 1px dashed #444; margin-top: 4px; padding-top: 4px;">`
-                        advHTML += blockHTML + styleHTML
-                        advHTML += `</div>`
-                    }
-                    advHTML += `</div>`
-                }
-            }
-        })
-
-        if (advHTML === '') {
-            advHTML = `<div style="font-size:11px; color:#777; font-style:italic; padding:10px;">No transform properties generated.</div>`
-        }
-
-        advContainer.innerHTML = advHTML
-        bindDynamicCheckboxes(advContainer)
-        
-        // Ensure scrolling triggers on dynamically injected Advanced Transforms
-        advContainer.querySelectorAll('.val-scroll-wrap').forEach(wrap => {
-            const valDisp = wrap.querySelector('.config-val-display')
-            if (valDisp) {
-                requestAnimationFrame(() => {
-                    // Falls back to character length check if the panel width registers as 0 natively
-                    if (valDisp.scrollWidth > 95 || valDisp.innerText.length > 13) {
-                        wrap.style.justifyContent = 'flex-start'
-                        valDisp.classList.add('marquee-anim')
-                    }
+                    layerHTML += `</div>`
+                    if (layerHasProps) advHTML += layerHTML
                 })
             }
-        })
+
+            if (advHTML === '') {
+                advHTML = `<div style="font-size:11px; color:#777; font-style:italic; padding:10px;">No transform properties generated.</div>`
+            }
+
+            advContainer.innerHTML = advHTML
+            bindDynamicCheckboxes(advContainer)
+        }
+
+        applyMarqueeEffects(configTab)
     }
 
     // Establishes event delegation bindings
@@ -7606,7 +7640,7 @@ export function initConfigTabBindings() {
                 const template = JSON.parse(event.target.result)
                 if (template.settings) {
                     Object.keys(template.settings).forEach(key => {
-                        const el = document.getElementById(key) || document.querySelector(`[data-config-id="${key}"]`)
+                        const el = document.getElementById(key) || document.querySelector(`[data-config-id="${key}"]`) || document.querySelector(`[data-target-id="${key}"]`)
                         if (el) {
                             const val = template.settings[key]
                             if (el.tagName === 'INPUT') {
