@@ -45,15 +45,19 @@ export function initMarqueeSystem() {
         el.style.textIndent = '0px'
         el.style.textOverflow = 'clip'
         
-        // 2. Measure TRUE text width using an isolated clone to bypass all flex/layout rendering bugs
+        // measure true text width using an isolated clone to bypass all flex layout rendering bugs
         const span = document.createElement('span')
         span.style.cssText = 'position:absolute; visibility:hidden; white-space:nowrap; left:-9999px;'
         const computedStyle = window.getComputedStyle(el)
         span.style.font = computedStyle.font
+        span.style.fontFamily = computedStyle.fontFamily
+        span.style.fontSize = computedStyle.fontSize
+        span.style.fontWeight = computedStyle.fontWeight
         span.style.letterSpacing = computedStyle.letterSpacing
+        span.style.textTransform = computedStyle.textTransform
         
-        // Evaluates strict value property for inputs vs inner string for standard elements
-        span.innerText = el.tagName === 'INPUT' ? el.value : el.innerText
+        // strictly uses textcontent instead of innertext to bypass visual truncation bugs like css ellipsis
+        span.textContent = el.tagName === 'INPUT' ? el.value : el.textContent
         
         document.body.appendChild(span)
         const textWidth = span.clientWidth
@@ -68,7 +72,7 @@ export function initMarqueeSystem() {
                 { textIndent: `${dist}px`, offset: 0.85 },
                 { textIndent: `${dist}px`, offset: 1 }
             ], {
-                duration: 4000,
+                duration: 2000,
                 direction: 'alternate',
                 iterations: Infinity,
                 easing: 'linear'
@@ -7529,21 +7533,44 @@ export function initConfigTabBindings() {
                         }
                     })
 
-                    // independent objects assembly
+                    // formats independent objects hierarchy with array counts and dynamic bounding spacers
                     if (indObjs.length > 0) {
                         const typeId = `${layerId}_ind`
+                        const indCollapseId = `collapse_ind_${layerId}`
+                        const objCnt = indObjs.length
+                        const objMetricsBtn = `<button class="collapse-btn" data-target="${indCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:0; padding:0;">(show)</button>`
+
                         hHTML += buildAdvHTML(typeId, `<span style="color:#ffffff;">${bucket} Objects</span>`, true, true, layerId, true, '', layerExists)
                         hHTML += `<div style="margin-top: 2px; margin-left: 6px; padding-left: 8px; border-left: 1px dashed #444; margin-bottom: 8px;">`
+                        
+                        hHTML += `<div style="margin-bottom:2px; color:#aaa; font-size:10px;">Total Objects: <span style="color:#2ecc71;">${objCnt}</span></div>`
+                        
+                        hHTML += `<div style="margin-bottom:2px; margin-left:6px; display:flex; align-items:center; padding-right:2px;">
+                            <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
+                                <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
+                                    <span class="config-item-name" style="font-family:monospace; white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis; color:#aaa; font-size:10px;">"objects": [<span style="color:#2ecc71;">${objCnt}</span>]</span>
+                                </div>
+                            </div>
+                            <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0;">${objMetricsBtn}</div>
+                            <div style="display:flex; align-items:center; flex-shrink:0;">
+                                <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
+                                <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
+                                    <input type="checkbox"><span class="config-switch-slider"></span>
+                                </div>
+                            </div>
+                        </div>`
+                        
+                        hHTML += `<div id="${indCollapseId}" style="display:none; margin-left: 12px; padding-left: 8px; border-left: 1px solid #555; margin-top:2px; margin-bottom:4px;">`
+                        
                         indObjs.forEach(obj => {
                             const objId = `obj_${obj.id || obj.node._id}`
                             let valStr = obj.name || obj.node.name() || `Object`
                             const innerText = typeof obj.node.findOne === 'function' ? obj.node.findOne('.inner-text') : null
                             if (innerText && typeof innerText.text === 'function' && innerText.text()) valStr = innerText.text()
                             
-                            hHTML += buildAdvHTML(objId, `"${valStr}"`, true, true, typeId, true, '', layerExists)
-                            hHTML += `<div style="margin-left: 6px; padding-left: 8px; color:#aaa; font-family:monospace; font-size:10px; margin-top:2px;">{}</div>`
+                            hHTML += buildAdvHTML(objId, `<span style="color:#2ecc71;">- "${valStr}"</span><span style="color:#aaa; font-family:monospace;">: {}</span>`, true, true, typeId, true, '', layerExists)
                         })
-                        hHTML += `</div>`
+                        hHTML += `</div></div>`
                     }
 
                     // groups assembly
