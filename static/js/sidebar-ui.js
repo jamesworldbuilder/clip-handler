@@ -59,13 +59,17 @@ export function initMarqueeSystem() {
         const textWidth = span.clientWidth
         span.remove()
         
-        // 3. Evaluate and apply physics based purely on explicit string width
+        // evaluate and apply physics based purely on explicit string width
         if (textWidth > cWidth + 2) {
+            const dist = cWidth - textWidth
             el.animate([
-                { textIndent: `${cWidth}px` },
-                { textIndent: `-${textWidth}px` }
+                { textIndent: '0px', offset: 0 },
+                { textIndent: '0px', offset: 0.15 },
+                { textIndent: `${dist}px`, offset: 0.85 },
+                { textIndent: `${dist}px`, offset: 1 }
             ], {
-                duration: (textWidth + cWidth) * 20,
+                duration: 4000,
+                direction: 'alternate',
                 iterations: Infinity,
                 easing: 'linear'
             })
@@ -1087,7 +1091,9 @@ export function initTextEditorBindings() {
                         activeSpan.innerText = newVal
                         
                         // perfectly applies marquee effect to long text layer names while typing
-                        requestAnimationFrame(() => requestAnimationFrame(() => window.applyMarquee(activeSpan)))
+                        requestAnimationFrame(() => requestAnimationFrame(() => {
+                            if (window.applyMarquee) window.applyMarquee(activeSpan)
+                        }))
                     }
                 }
             }
@@ -1269,7 +1275,9 @@ export function initImageEditorBindings() {
                     activeSpan.innerText = newVal
                     
                     // perfectly applies marquee effect to long layer names while typing
-                    requestAnimationFrame(() => requestAnimationFrame(() => window.applyMarquee(activeSpan)))
+                    requestAnimationFrame(() => requestAnimationFrame(() => {
+                        if (window.applyMarquee) window.applyMarquee(activeSpan)
+                    }))
                 }
             }
         }
@@ -1755,7 +1763,9 @@ export function initImageEditorBindings() {
                     const activeSpan = document.querySelector('.list-item.active-item .layer-name') || document.querySelector('.list-item.active-item > span')
                     if (activeSpan) {
                         activeSpan.innerText = e.target.value
-                        requestAnimationFrame(() => requestAnimationFrame(() => window.applyMarquee(activeSpan)))
+                        requestAnimationFrame(() => requestAnimationFrame(() => {
+                            if (window.applyMarquee) window.applyMarquee(activeSpan)
+                        }))
                     }
                 }
             }
@@ -2711,24 +2721,6 @@ function selectLayer(layerId) {
     renderLayersUI()
 }
 
-// Global observer for dynamic text scrolling
-if (typeof window.marqueeObserver === 'undefined') {
-    window.marqueeObserver = new ResizeObserver(entries => {
-        entries.forEach(entry => {
-            const el = entry.target;
-            if (el.scrollWidth > el.clientWidth && el.clientWidth > 0) {
-                const dist = el.clientWidth - el.scrollWidth;
-                el.style.setProperty('--name-scroll-dist', `${dist}px`);
-                if (!el.classList.contains('name-marquee-anim')) {
-                    el.classList.add('name-marquee-anim');
-                }
-            } else {
-                el.classList.remove('name-marquee-anim');
-            }
-        });
-    });
-}
-
 export function renderLayersUI() {
     const container = document.getElementById('layers-container')
     
@@ -2875,7 +2867,7 @@ export function renderLayersUI() {
         nameSpan.style.minWidth = '0'
 
         // observes element and strictly applies marquee physics once it becomes fully visible
-        window.marqueeObserver.observe(nameSpan)
+        if (window.marqueeObserver) window.marqueeObserver.observe(nameSpan)
 
         nameSpan.addEventListener('dblclick', (e) => {
             e.stopPropagation()
@@ -3088,7 +3080,7 @@ export function renderLayersUI() {
             label.style.minWidth = '0' // Guarantees flex children can successfully truncate
 
             // observes element and strictly applies marquee physics once it becomes fully visible
-            window.marqueeObserver.observe(label)
+            if (window.marqueeObserver) window.marqueeObserver.observe(label)
 
             label.addEventListener('dblclick', (e) => {
                 e.stopPropagation()
@@ -4453,12 +4445,12 @@ export function initTransformsPanel(node) {
             if (textInput.value.trim() === '') textInput.value = previousValue
             else previousValue = textInput.value
             syncTransformsFromDOM()
-            window.applyMarquee(textInput)
+            if (window.applyMarquee) window.applyMarquee(textInput)
         })
         textInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); textInput.blur() } })
         
-        window.marqueeObserver.observe(textInput)
-        setTimeout(() => window.applyMarquee(textInput), 50)
+        if (window.marqueeObserver) window.marqueeObserver.observe(textInput)
+        if (window.applyMarquee) setTimeout(() => window.applyMarquee(textInput), 50)
         
         const timeBtn = document.createElement('button')
         timeBtn.id = 'set-transform-interval-btn'
@@ -4746,203 +4738,217 @@ export function initTransformsPanel(node) {
             
             elementsWrapper.appendChild(gridScrollArea)
 
-            // Remove any legacy action groups inside the wiping wrapper zone
+            // remove any legacy action groups inside the wiping wrapper zone
             const oldActionGroup = matrixDiv.querySelector('.matrix-action-group')
             if (oldActionGroup) oldActionGroup.remove()
 
-            // wraps absolute action controls to natively align them underneath each other on the right edge
-            const actionGroup = document.createElement('div')
-            actionGroup.className = 'matrix-action-group'
-            actionGroup.style.cssText = 'position:absolute; right:0px; bottom:4px; display:flex; flex-direction:column; gap:6px;'
+            let actionGroup = document.getElementById('global-matrix-action-group')
+            let addMatrixBtn, removeMatrixBtn
 
-            // appends configuration generation control matching identical row styling and right side line coordinates
-            const addMatrixBtn = document.createElement('button')
-            addMatrixBtn.id = 'add-transformation-btn'
-            addMatrixBtn.innerText = '+'
-            addMatrixBtn.title = 'Add Transform Configuration Element'
-            
-            let totalElementDuration = 0
-            if (configData.transformGroupData) {
-                Object.keys(configData.transformGroupData).forEach(k => {
-                    const tInv = configData.transformGroupData[k].transform_interval
-                    if (tInv && tInv.start !== undefined && tInv.end !== undefined) {
-                        totalElementDuration += (parseFloat(tInv.end) - parseFloat(tInv.start))
-                    }
-                })
-            }
-            
-            let parentDuration = 0
-            const aObj = getActiveObj()
-            if (aObj && aObj.startTime !== undefined && aObj.endTime !== undefined) {
-                parentDuration = aObj.endTime - aObj.startTime
-            }
-            
-            const isMaxedOut = parentDuration > 0 && totalElementDuration >= (parentDuration - 0.01)
+            if (!actionGroup) {
+                // wraps absolute action controls to natively align them underneath each other on the right edge
+                actionGroup = document.createElement('div')
+                actionGroup.id = 'global-matrix-action-group'
+                actionGroup.className = 'matrix-action-group'
+                actionGroup.style.cssText = 'position:absolute; right:0px; bottom:4px; display:flex; flex-direction:column; gap:6px;'
 
-            // visually overrides color and pointer events if global cap or duration limit is reached
-            addMatrixBtn.style.cssText = `width:24px; height:24px; background:#1a252f; border:1px solid #34495e; color:${(totalMarkers >= 64 || isMaxedOut) ? '#555' : '#00a8ff'}; font-size:16px; font-weight:bold; cursor:${(totalMarkers >= 64 || isMaxedOut) ? 'not-allowed' : 'pointer'}; border-radius:2px; display:flex; align-items:center; justify-content:center; padding:0; box-sizing:border-box;`
-            
-            addMatrixBtn.onclick = (e) => {
-                e.preventDefault()
-                e.stopPropagation()
+                // appends configuration generation control matching identical row styling and right side line coordinates
+                addMatrixBtn = document.createElement('button')
+                addMatrixBtn.id = 'add-transformation-btn'
+                addMatrixBtn.innerText = '+'
+                addMatrixBtn.title = 'Add Transform Configuration Element'
                 
-                if (isMaxedOut) return
+                // appends configuration removal control underneath add button
+                removeMatrixBtn = document.createElement('button')
+                removeMatrixBtn.id = 'remove-transformation-btn'
+                removeMatrixBtn.innerText = '-'
+                removeMatrixBtn.title = 'Remove Selected Transform Configuration Element'
 
-                // read fresh key lengths directly from the dictionary map target data to prevent layout collapse
-                const activeKeys = Object.keys(configData.transformGroupData || {})
-                if (activeKeys.length >= 64) return
-                
-                // generates randomized structural ids for transform mapping
-                const generateSplitId = () => {
-                    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-                    let result = ''
-                    for (let i = 0; i < 8; i++) {
-                        result += chars[Math.floor(Math.random() * chars.length)]
-                    }
-                    return result
-                }
+                actionGroup.appendChild(addMatrixBtn)
+                actionGroup.appendChild(removeMatrixBtn)
+            } else {
+                addMatrixBtn = actionGroup.querySelector('#add-transformation-btn')
+                removeMatrixBtn = actionGroup.querySelector('#remove-transformation-btn')
+            }
 
-                // computes sequential interval timing chaining strictly from the end of the previous element
-                let newStart = 0
-                let newEnd = 0.15
-                if (activeKeys.length > 0) {
-                    const lastKey = activeKeys[activeKeys.length - 1]
-                    const lastInterval = configData.transformGroupData[lastKey].transform_interval || configData.transformGroupData[lastKey].interval
-                    if (lastInterval && lastInterval.end !== undefined) {
-                        // explicitly parses end value to float before mathematical addition to prevent string concatenation crashes
-                        const parsedEnd = parseFloat(lastInterval.end)
-                        newStart = Number(parsedEnd.toFixed(3))
-                        newEnd = Number((newStart + 0.15).toFixed(3))
-                    }
-                } else {
-                    // fallbacks to root tracking container limits if it is the first index position
-                    if (configData.interval && configData.interval.start !== undefined) {
-                        newStart = Number(parseFloat(configData.interval.start).toFixed(3))
-                        newEnd = Number((newStart + 0.15).toFixed(3))
-                    }
+            // explicitly restricts rendering and binding of action controls to the currently active list item only
+            const isRowActive = row.style.borderLeftColor === 'rgb(0, 168, 255)' || row.style.borderLeftColor === '#00a8ff'
+            if (isRowActive) {
+                let totalElementDuration = 0
+                if (configData.transformGroupData) {
+                    Object.keys(configData.transformGroupData).forEach(k => {
+                        const tInv = configData.transformGroupData[k].transform_interval
+                        if (tInv && tInv.start !== undefined && tInv.end !== undefined) {
+                            totalElementDuration += (parseFloat(tInv.end) - parseFloat(tInv.start))
+                        }
+                    })
                 }
                 
-                // dynamically shrinks the new marker if it exceeds the parent interval block's end boundary
+                let parentDuration = 0
                 const aObj = getActiveObj()
-                let maxEnd = Infinity
-                if (aObj && aObj.endTime !== undefined) {
-                    maxEnd = parseFloat(aObj.endTime)
-                } else if (configData.interval && configData.interval.end !== undefined) {
-                    maxEnd = parseFloat(configData.interval.end)
+                if (aObj && aObj.startTime !== undefined && aObj.endTime !== undefined) {
+                    parentDuration = aObj.endTime - aObj.startTime
                 }
                 
-                if (newEnd > maxEnd) {
-                    newEnd = Number(maxEnd.toFixed(3))
-                }
-                
-                if (newEnd <= newStart) return
-                
-                // dynamically appends a new unique integer index marker element layout block sequentially
-                const nextIdx = activeKeys.length
-                
-                const tRow = matrixDiv.closest('.transforms-list-item')
-                let currentCfg = configData
-                if (tRow) {
-                    try { currentCfg = JSON.parse(tRow.dataset.transformConfig) } catch(err) {}
-                }
-                
-                currentCfg.transformGroupData[nextIdx] = {
-                    set_id: `set_${generateSplitId()}`,
-                    style_id: `style_${generateSplitId()}`,
-                    transform_interval: { start: newStart, end: newEnd }
-                }
-                
-                currentCfg.activeTransformEditIndex = nextIdx
-                configData.transformGroupData = currentCfg.transformGroupData
-                configData.activeTransformEditIndex = nextIdx
-                
-                if (tRow) {
-                    tRow.dataset.transformConfig = JSON.stringify(currentCfg)
-                }
-                
-                window._forceTimelineAutoSelect = true
-                
-                // forces element array map interface loop rendering update cycle without jumping
-                renderMatrixGrid()
-                
-                if (typeof syncTransformsFromDOM === 'function') {
-                    syncTransformsFromDOM()
-                }
-                
-                if (typeof renderTimelineIntervals === 'function') renderTimelineIntervals()
-                if (typeof renderMultiTrackTimeline === 'function') renderMultiTrackTimeline()
-                
-                // forces the advanced properties terminal to scroll to the absolute bottom bounds natively
-                const configDisplay = document.getElementById('advanced-config-display')
-                if (configDisplay) {
-                    configDisplay.scrollTop = configDisplay.scrollHeight
-                }
-            }
-            
-            // appends configuration removal control underneath add button
-            const removeMatrixBtn = document.createElement('button')
-            removeMatrixBtn.id = 'remove-transformation-btn'
-            removeMatrixBtn.innerText = '-'
-            removeMatrixBtn.title = 'Remove Selected Transform Configuration Element'
-            
-            // visually overrides color and pointer events if there is only 1 configuration left
-            removeMatrixBtn.style.cssText = `width:24px; height:24px; background:#1a252f; border:1px solid #34495e; color:${totalMarkers <= 1 ? '#555' : '#00a8ff'}; font-size:16px; font-weight:bold; cursor:${totalMarkers <= 1 ? 'not-allowed' : 'pointer'}; border-radius:2px; display:flex; align-items:center; justify-content:center; padding:0; box-sizing:border-box;`
-            
-            removeMatrixBtn.onclick = (e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                
-                if (totalMarkers <= 1) return // preserves at least one configuration state
-                
-                const activeIdx = configData.activeTransformEditIndex || 0
-                const keys = Object.keys(configData.transformGroupData).sort((a,b) => Number(a) - Number(b))
-                
-                const newTData = {}
-                let newIdx = 0
-                
-                // re-indexes existing configurations contiguous from 0, completely dropping the currently selected element
-                for (let i = 0; i < keys.length; i++) {
-                    if (Number(keys[i]) === activeIdx) continue
-                    newTData[newIdx] = configData.transformGroupData[keys[i]]
-                    newIdx++
-                }
-                
-                const tRow = matrixDiv.closest('.transforms-list-item')
-                let currentCfg = configData
-                if (tRow) {
-                    try { currentCfg = JSON.parse(tRow.dataset.transformConfig) } catch(err) {}
-                }
-                
-                currentCfg.transformGroupData = newTData
-                configData.transformGroupData = newTData
-                
-                // shifts active selection safely to the prior element or preserves index 0
-                if (activeIdx >= newIdx && newIdx > 0) {
-                    currentCfg.activeTransformEditIndex = newIdx - 1
-                    configData.activeTransformEditIndex = newIdx - 1
-                } else if (activeIdx >= newIdx) {
-                    currentCfg.activeTransformEditIndex = 0
-                    configData.activeTransformEditIndex = 0
-                }
-                
-                if (tRow) {
-                    tRow.dataset.transformConfig = JSON.stringify(currentCfg)
-                }
-                
-                // forces the matrix to visually refresh without jumping
-                renderMatrixGrid()
-                
-                if (typeof syncTransformsFromDOM === 'function') {
-                    syncTransformsFromDOM()
-                }
-                
-                if (typeof renderTimelineIntervals === 'function') renderTimelineIntervals()
-                if (typeof renderMultiTrackTimeline === 'function') renderMultiTrackTimeline()
-            }
+                const isMaxedOut = parentDuration > 0 && totalElementDuration >= (parentDuration - 0.01)
 
-            actionGroup.appendChild(addMatrixBtn)
-            actionGroup.appendChild(removeMatrixBtn)
-            matrixDiv.appendChild(actionGroup)
+                // visually overrides color and pointer events if global cap or duration limit is reached
+                addMatrixBtn.style.cssText = `width:24px; height:24px; background:#1a252f; border:1px solid #34495e; color:${(totalMarkers >= 64 || isMaxedOut) ? '#555' : '#00a8ff'}; font-size:16px; font-weight:bold; cursor:${(totalMarkers >= 64 || isMaxedOut) ? 'not-allowed' : 'pointer'}; border-radius:2px; display:flex; align-items:center; justify-content:center; padding:0; box-sizing:border-box;`
+                
+                addMatrixBtn.onclick = (e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    
+                    if (isMaxedOut) return
+
+                    // read fresh key lengths directly from the dictionary map target data to prevent layout collapse
+                    const activeKeys = Object.keys(configData.transformGroupData || {})
+                    if (activeKeys.length >= 64) return
+                    
+                    // generates randomized structural ids for transform mapping
+                    const generateSplitId = () => {
+                        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+                        let result = ''
+                        for (let i = 0; i < 8; i++) {
+                            result += chars[Math.floor(Math.random() * chars.length)]
+                        }
+                        return result
+                    }
+
+                    // computes sequential interval timing chaining strictly from the end of the previous element
+                    let newStart = 0
+                    let newEnd = 0.15
+                    if (activeKeys.length > 0) {
+                        const lastKey = activeKeys[activeKeys.length - 1]
+                        const lastInterval = configData.transformGroupData[lastKey].transform_interval || configData.transformGroupData[lastKey].interval
+                        if (lastInterval && lastInterval.end !== undefined) {
+                            // explicitly parses end value to float before mathematical addition to prevent string concatenation crashes
+                            const parsedEnd = parseFloat(lastInterval.end)
+                            newStart = Number(parsedEnd.toFixed(3))
+                            newEnd = Number((newStart + 0.15).toFixed(3))
+                        }
+                    } else {
+                        // fallbacks to root tracking container limits if it is the first index position
+                        if (configData.interval && configData.interval.start !== undefined) {
+                            newStart = Number(parseFloat(configData.interval.start).toFixed(3))
+                            newEnd = Number((newStart + 0.15).toFixed(3))
+                        }
+                    }
+                    
+                    // dynamically shrinks the new marker if it exceeds the parent interval block end boundary
+                    const aObj = getActiveObj()
+                    let maxEnd = Infinity
+                    if (aObj && aObj.endTime !== undefined) {
+                        maxEnd = parseFloat(aObj.endTime)
+                    } else if (configData.interval && configData.interval.end !== undefined) {
+                        maxEnd = parseFloat(configData.interval.end)
+                    }
+                    
+                    if (newEnd > maxEnd) {
+                        newEnd = Number(maxEnd.toFixed(3))
+                    }
+                    
+                    if (newEnd <= newStart) return
+                    
+                    // dynamically appends a new unique integer index marker element layout block sequentially
+                    const nextIdx = activeKeys.length
+                    
+                    const tRow = matrixDiv.closest('.transforms-list-item')
+                    let currentCfg = configData
+                    if (tRow) {
+                        try { currentCfg = JSON.parse(tRow.dataset.transformConfig) } catch(err) {}
+                    }
+                    
+                    currentCfg.transformGroupData[nextIdx] = {
+                        set_id: `set_${generateSplitId()}`,
+                        style_id: `style_${generateSplitId()}`,
+                        transform_interval: { start: newStart, end: newEnd }
+                    }
+                    
+                    currentCfg.activeTransformEditIndex = nextIdx
+                    configData.transformGroupData = currentCfg.transformGroupData
+                    configData.activeTransformEditIndex = nextIdx
+                    
+                    if (tRow) {
+                        tRow.dataset.transformConfig = JSON.stringify(currentCfg)
+                    }
+                    
+                    window._forceTimelineAutoSelect = true
+                    
+                    // forces element array map interface loop rendering update cycle without jumping
+                    renderMatrixGrid()
+                    
+                    if (typeof syncTransformsFromDOM === 'function') {
+                        syncTransformsFromDOM()
+                    }
+                    
+                    if (typeof renderTimelineIntervals === 'function') renderTimelineIntervals()
+                    if (typeof renderMultiTrackTimeline === 'function') renderMultiTrackTimeline()
+                    
+                    // forces the advanced properties terminal to scroll to the absolute bottom bounds natively
+                    const configDisplay = document.getElementById('advanced-config-display')
+                    if (configDisplay) {
+                        configDisplay.scrollTop = configDisplay.scrollHeight
+                    }
+                }
+
+                // visually overrides color and pointer events if there is only 1 configuration left
+                removeMatrixBtn.style.cssText = `width:24px; height:24px; background:#1a252f; border:1px solid #34495e; color:${totalMarkers <= 1 ? '#555' : '#00a8ff'}; font-size:16px; font-weight:bold; cursor:${totalMarkers <= 1 ? 'not-allowed' : 'pointer'}; border-radius:2px; display:flex; align-items:center; justify-content:center; padding:0; box-sizing:border-box;`
+                
+                removeMatrixBtn.onclick = (e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    
+                    if (totalMarkers <= 1) return 
+                    
+                    const activeIdx = configData.activeTransformEditIndex || 0
+                    const keys = Object.keys(configData.transformGroupData).sort((a,b) => Number(a) - Number(b))
+                    
+                    const newTData = {}
+                    let newIdx = 0
+                    
+                    // re-indexes existing configurations contiguous from 0
+                    for (let i = 0; i < keys.length; i++) {
+                        if (Number(keys[i]) === activeIdx) continue
+                        newTData[newIdx] = configData.transformGroupData[keys[i]]
+                        newIdx++
+                    }
+                    
+                    const tRow = matrixDiv.closest('.transforms-list-item')
+                    let currentCfg = configData
+                    if (tRow) {
+                        try { currentCfg = JSON.parse(tRow.dataset.transformConfig) } catch(err) {}
+                    }
+                    
+                    currentCfg.transformGroupData = newTData
+                    configData.transformGroupData = newTData
+                    
+                    // shifts active selection safely to the prior element or preserves index 0
+                    if (activeIdx >= newIdx && newIdx > 0) {
+                        currentCfg.activeTransformEditIndex = newIdx - 1
+                        configData.activeTransformEditIndex = newIdx - 1
+                    } else if (activeIdx >= newIdx) {
+                        currentCfg.activeTransformEditIndex = 0
+                        configData.activeTransformEditIndex = 0
+                    }
+                    
+                    if (tRow) {
+                        tRow.dataset.transformConfig = JSON.stringify(currentCfg)
+                    }
+                    
+                    // forces the matrix to visually refresh without jumping
+                    renderMatrixGrid()
+                    
+                    if (typeof syncTransformsFromDOM === 'function') {
+                        syncTransformsFromDOM()
+                    }
+                    
+                    if (typeof renderTimelineIntervals === 'function') renderTimelineIntervals()
+                    if (typeof renderMultiTrackTimeline === 'function') renderMultiTrackTimeline()
+                }
+
+                matrixDiv.appendChild(actionGroup)
+            }
             
             // rigidly restores exact previous scroll position to prevent jumping
             gridScrollArea.scrollTop = currentScroll
@@ -6317,10 +6323,10 @@ function initCaptionsPanel(node) {
                 nameDisplay.style.textOverflow = 'clip'
                 nameDisplay.style.minWidth = '0'
                 
-                window.marqueeObserver.observe(nameDisplay)
+                if (window.marqueeObserver) window.marqueeObserver.observe(nameDisplay)
                 
                 // Forces manual marquee evaluation because the text change doesn't alter the fixed flex-container width
-                setTimeout(() => window.applyMarquee(nameDisplay), 50)
+                if (window.applyMarquee) setTimeout(() => window.applyMarquee(nameDisplay), 50)
             }
             
             // dynamically syncs the overlapping transform row name to the newly generated Captions_Grp ID
@@ -6514,7 +6520,9 @@ function initCaptionsPanel(node) {
                 const activeSpan = document.querySelector('.list-item.active-item .layer-name') || document.querySelector('.list-item.active-item > span')
                 if (activeSpan) {
                     activeSpan.innerText = val
-                    requestAnimationFrame(() => requestAnimationFrame(() => window.applyMarquee(activeSpan)))
+                    requestAnimationFrame(() => requestAnimationFrame(() => {
+                        if (window.applyMarquee) window.applyMarquee(activeSpan)
+                    }))
                 }
             }
             
@@ -6644,11 +6652,11 @@ function initCaptionsPanel(node) {
                 previousValue = textInput.value
             }
             syncListFromDOM()
-            window.applyMarquee(textInput)
+            if (window.applyMarquee) window.applyMarquee(textInput)
         })
         
-        window.marqueeObserver.observe(textInput)
-        setTimeout(() => window.applyMarquee(textInput), 50)
+        if (window.marqueeObserver) window.marqueeObserver.observe(textInput)
+        if (window.applyMarquee) setTimeout(() => window.applyMarquee(textInput), 50)
 
         textInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
@@ -7228,18 +7236,6 @@ export function initConfigTabBindings() {
         .config-switch-label.disabled-val .config-val-display { color:#ffffff !important; opacity:0.6; }
         .config-switch-label.disabled-val .config-item-name { color:#666; }
         
-        .marquee-anim { animation: marquee-scroll 4s alternate linear infinite; }
-        @keyframes marquee-scroll {
-            0%, 15% { transform: translateX(0); }
-            85%, 100% { transform: translateX(calc(75px - 100%)); }
-        }
-
-        .name-marquee-anim { animation: name-marquee-scroll 4s alternate linear infinite; }
-        @keyframes name-marquee-scroll {
-            0%, 15% { transform: translateX(0); }
-            85%, 100% { transform: translateX(var(--name-scroll-dist, -20px)); }
-        }
-        
         .collapse-btn:hover { color:#f1c40f !important; text-decoration:underline; }
     </style>`
 
@@ -7261,13 +7257,14 @@ export function initConfigTabBindings() {
                 const parentAttr = item.parent ? `data-parent-id="${item.parent}"` : ''
                 
                 configUI += `<label class="config-switch-label" id="label-wrap-${item.id}" style="${indentStyle}">
-                    <div style="display:flex; align-items:center; flex:1; min-width:0; padding-right:10px; justify-content: space-between;">
-                        <div class="name-scroll-wrap" style="overflow:hidden; display:flex; margin-right:8px;">
-                            <span class="config-item-name" style="white-space:nowrap; display:inline-block;">${item.label}</span>
+                    <div style="display:flex; align-items:center; flex:1; min-width:0; padding-right:2px; justify-content: space-between;">
+                        <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
+                            <span class="config-item-name" style="white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">${item.label}</span>
                         </div>
+                        <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0; visibility:hidden;"><button class="collapse-btn" style="font-size:9px; padding:0;">(show)</button></div>
                         <div style="display:flex; align-items:center; flex-shrink:0;">
                             <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px;">
-                                <span class="config-val-display" id="val-disp-${item.id}">-</span>
+                                <span class="config-val-display" id="val-disp-${item.id}" style="display:block; white-space:nowrap; overflow:hidden; width:100%; text-align:right; text-overflow:ellipsis;">-</span>
                             </div>
                             <div class="config-switch-wrap" style="margin-right:0;">
                                 <input type="checkbox" class="config-export-checkbox" data-target-id="${item.id}" ${parentAttr} checked>
@@ -7295,7 +7292,7 @@ export function initConfigTabBindings() {
 
     // Generates HTML strictly formatted with toggles on the right for dynamic components
     const buildAdvHTML = (id, label, val, isParent, parentId = '', preserveName = false, extraHtml = '', isChecked = true) => {
-        const indentStyle = parentId ? 'margin-top:2px;' : ''
+        const indentStyle = parentId ? 'margin-left:6px; border-left:1px solid #444; padding-left:6px;' : ''
         const parentAttr = parentId ? `data-parent-id="${parentId}"` : ''
         
         const lowerLabel = label.toLowerCase()
@@ -7332,16 +7329,16 @@ export function initConfigTabBindings() {
         const disabledClass = isChecked ? '' : 'disabled-val'
         
         return `<label class="config-switch-label ${disabledClass}" id="label-wrap-${id}" style="${indentStyle}">
-            <div style="display:flex; align-items:center; flex:1; min-width:0; padding-right:10px; justify-content: space-between;">
-                <div style="display:flex; align-items:center; overflow:hidden;">
-                    <div class="name-scroll-wrap" style="overflow:hidden; display:flex;">
-                        <span class="config-item-name" style="white-space:nowrap; display:inline-block;">${prettyLabel}</span>
+            <div style="display:flex; align-items:center; flex:1; min-width:0; padding-right:2px;">
+                <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
+                    <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
+                        <span class="config-item-name" style="white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">${prettyLabel}</span>
                     </div>
-                    ${extraHtml}
                 </div>
+                ${extraHtml ? `<div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0;">${extraHtml}</div>` : `<div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0; visibility:hidden;"><button class="collapse-btn" style="font-size:9px; padding:0;">(show)</button></div>`}
                 <div style="display:flex; align-items:center; flex-shrink:0;">
                     <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:${isParent ? 'none' : 'flex'};">
-                        <span class="config-val-display" id="val-disp-${id}" style="color:${valColor};">${displayVal}</span>
+                        <span class="config-val-display" id="val-disp-${id}" style="color:${valColor}; display:block; white-space:nowrap; overflow:hidden; width:100%; text-align:right; text-overflow:ellipsis;">${displayVal}</span>
                     </div>
                     <div class="config-switch-wrap" style="margin-right:0;">
                         <input type="checkbox" class="config-export-checkbox dynamic-adv-cb" data-target-id="${id}" data-dynamic-val="${safeVal}" ${parentAttr} ${checkedAttr}>
@@ -7352,34 +7349,19 @@ export function initConfigTabBindings() {
         </label>`
     }
 
-    // Scans available UI bounds and maps appropriate scrolling animations
+    // scans available ui bounds and maps appropriate scrolling animations
     const applyMarqueeEffects = (container) => {
-        container.querySelectorAll('.config-switch-label').forEach(labelWrap => {
-            const valWrap = labelWrap.querySelector('.val-scroll-wrap')
-            const valDisp = labelWrap.querySelector('.config-val-display')
-            const nameWrap = labelWrap.querySelector('.name-scroll-wrap')
-            const nameDisp = labelWrap.querySelector('.config-item-name')
+        container.querySelectorAll('.config-item-name, .config-val-display').forEach(el => {
+            el.style.display = 'block'
+            el.style.width = '100%'
+            el.style.overflow = 'hidden'
+            
+            if (el.classList.contains('config-val-display')) {
+                el.style.textAlign = 'right'
+            }
 
-            requestAnimationFrame(() => {
-                if (valDisp && valWrap && valWrap.style.display !== 'none') {
-                    valDisp.classList.remove('marquee-anim')
-                    if (valDisp.scrollWidth > 75 || valDisp.innerText.length > 10) {
-                        valWrap.style.justifyContent = 'flex-start'
-                        valDisp.classList.add('marquee-anim')
-                    } else {
-                        valWrap.style.justifyContent = 'flex-end'
-                    }
-                }
-
-                if (nameDisp && nameWrap) {
-                    nameDisp.classList.remove('name-marquee-anim')
-                    if (nameDisp.scrollWidth > nameWrap.clientWidth && nameWrap.clientWidth > 0) {
-                        const dist = nameWrap.clientWidth - nameDisp.scrollWidth
-                        nameDisp.style.setProperty('--name-scroll-dist', `${dist}px`)
-                        nameDisp.classList.add('name-marquee-anim')
-                    }
-                }
-            })
+            if (window.marqueeObserver) window.marqueeObserver.observe(el)
+            if (window.applyMarquee) setTimeout(() => window.applyMarquee(el), 50)
         })
     }
 
@@ -7519,9 +7501,9 @@ export function initConfigTabBindings() {
                 const layerMetricsBtn = `<button class="collapse-btn" data-target="${collapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">${btnText}</button>`
 
                 hHTML += `<div id="${bucket.toLowerCase()}-layer-toggles" style="margin-bottom: 8px; padding: 6px 8px; background: #1a252f; border: 1px solid #34495e; border-radius: 4px;">`
-                hHTML += buildAdvHTML(layerId, `${bucket} Layer`, true, true, '', true, layerMetricsBtn, layerExists)
+                hHTML += buildAdvHTML(layerId, `<span style="color:#ffffff;">${bucket} Layer</span>`, true, true, '', true, layerMetricsBtn, layerExists)
                 
-                hHTML += `<div id="${collapseId}" style="display:${layerExists ? 'block' : 'none'}; margin-top: 4px; margin-left: 8px; padding-left: 12px; border-left: 1px solid #34495e;">`
+                hHTML += `<div id="${collapseId}" style="display:${layerExists ? 'block' : 'none'}; margin-top: 4px; margin-left: 6px; padding-left: 8px; border-left: 1px solid #34495e;">`
                 
                 if (bucket === 'Background') {
                     const rawVideoId = `${layerId}_rawvideo`
@@ -7547,11 +7529,11 @@ export function initConfigTabBindings() {
                         }
                     })
 
-                    // Independent Objects Assembly
+                    // independent objects assembly
                     if (indObjs.length > 0) {
                         const typeId = `${layerId}_ind`
-                        hHTML += buildAdvHTML(typeId, `${bucket} Objects`, true, true, layerId, true, '', layerExists)
-                        hHTML += `<div style="margin-top: 2px; margin-left: 8px; padding-left: 12px; border-left: 1px dashed #444; margin-bottom: 8px;">`
+                        hHTML += buildAdvHTML(typeId, `<span style="color:#ffffff;">${bucket} Objects</span>`, true, true, layerId, true, '', layerExists)
+                        hHTML += `<div style="margin-top: 2px; margin-left: 6px; padding-left: 8px; border-left: 1px dashed #444; margin-bottom: 8px;">`
                         indObjs.forEach(obj => {
                             const objId = `obj_${obj.id || obj.node._id}`
                             let valStr = obj.name || obj.node.name() || `Object`
@@ -7559,22 +7541,22 @@ export function initConfigTabBindings() {
                             if (innerText && typeof innerText.text === 'function' && innerText.text()) valStr = innerText.text()
                             
                             hHTML += buildAdvHTML(objId, `"${valStr}"`, true, true, typeId, true, '', layerExists)
-                            hHTML += `<div style="margin-left: 8px; padding-left: 12px; color:#aaa; font-family:monospace; font-size:10px; margin-top:2px;">{}</div>`
+                            hHTML += `<div style="margin-left: 6px; padding-left: 8px; color:#aaa; font-family:monospace; font-size:10px; margin-top:2px;">{}</div>`
                         })
                         hHTML += `</div>`
                     }
 
-                    // Groups Assembly
+                    // groups assembly
                     const groupsId = `${layerId}_groups`
                     const hasGroups = Object.keys(cGroups).length > 0 || Object.keys(tGroups).length > 0
-                    hHTML += buildAdvHTML(groupsId, `Groups`, true, true, layerId, true, '', hasGroups)
-                    hHTML += `<div style="margin-top: 2px; margin-left: 8px; padding-left: 12px; border-left: 1px solid #34495e;">`
+                    hHTML += buildAdvHTML(groupsId, `<span style="color:#ffffff;">Groups</span>`, true, true, layerId, true, '', hasGroups)
+                    hHTML += `<div style="margin-top: 2px; margin-left: 6px; padding-left: 8px; border-left: 1px solid #34495e;">`
 
-                    // Caption Groups Assembly
+                    // caption groups assembly
                     const cgContainerId = `${groupsId}_cg`
                     const hasCGroups = Object.keys(cGroups).length > 0
-                    hHTML += buildAdvHTML(cgContainerId, `Caption Groups`, true, true, groupsId, true, '', hasCGroups)
-                    hHTML += `<div style="margin-top: 2px; margin-left: 8px; padding-left: 12px; border-left: 1px dashed #444; margin-bottom: 8px;">`
+                    hHTML += buildAdvHTML(cgContainerId, `<span style="color:#ffffff;">Caption Groups</span>`, true, true, groupsId, true, '', hasCGroups)
+                    hHTML += `<div style="margin-top: 2px; margin-left: 6px; padding-left: 8px; border-left: 1px dashed #444; margin-bottom: 8px;">`
                     
                     if (hasCGroups) {
                         Object.keys(cGroups).forEach(cgName => {
@@ -7590,36 +7572,59 @@ export function initConfigTabBindings() {
                             const metricsBtn = `<button class="collapse-btn" data-target="${cgCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">(show)</button>`
                             hHTML += buildAdvHTML(cgId, `"${cgName}"`, true, true, cgContainerId, true, metricsBtn, true)
                             
-                            hHTML += `<div id="${cgCollapseId}" style="display:none; margin-left: 8px; padding-left: 12px; color:#aaa; font-family:monospace; font-size:10px; margin-top:2px; margin-bottom:4px;">`
+                            hHTML += `<div id="${cgCollapseId}" style="display:none; margin-left: 6px; padding-left: 8px; color:#aaa; font-family:monospace; font-size:10px; margin-top:2px; margin-bottom:4px;">`
                             hHTML += `<div style="margin-bottom:4px;">Total Captions: <span style="color:#2ecc71;">${totalCaps}</span></div>`
                             
                             cGroups[cgName].forEach(obj => {
                                 const objId = `obj_${obj.id || obj.node._id}`
-                                let valStr = obj.name || obj.node.name() || `Object`
                                 
                                 const capList = obj.node.getAttr('captionsList') || obj.node.getAttr('captionData') || []
                                 const capCollapseId = `collapse_cap_${objId}`
-                                const capBtn = `<button class="collapse-btn" data-target="${capCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">(show)</button>`
+                                const capBtn = `<button class="collapse-btn" data-target="${capCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:0; padding:0;">(show)</button>`
                                 
-                                hHTML += buildAdvHTML(objId, `"${valStr}"`, true, true, cgId, true, '', true)
-                                hHTML += `<div style="margin-left:8px; padding-left:12px; margin-top:2px;">`
-                                hHTML += `<div style="margin-bottom:2px;">"cap_cnt": [${capList.length}] ${capBtn}</div>`
-                                hHTML += `<div id="${capCollapseId}" style="display:none; margin-left:8px; padding-left:12px; border-left:1px solid #555; color:#2ecc71;">`
-                                capList.forEach(cap => hHTML += `<div style="margin-top:2px;">- "${cap}"</div>`)
-                                hHTML += `</div></div>`
+                                hHTML += `<div style="margin-bottom:2px; margin-left:6px; display:flex; align-items:center; padding-right:2px;">
+                                    <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
+                                        <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
+                                            <span class="config-item-name" style="font-family:monospace; white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">"captionsList": [<span style="color:#2ecc71;">${capList.length}</span>]</span>
+                                        </div>
+                                    </div>
+                                    <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0;">${capBtn}</div>
+                                    <div style="display:flex; align-items:center; flex-shrink:0;">
+                                        <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
+                                        <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
+                                            <input type="checkbox"><span class="config-switch-slider"></span>
+                                        </div>
+                                    </div>
+                                </div>`
+                                hHTML += `<div id="${capCollapseId}" style="display:none; margin-left:12px; padding-left:8px; border-left:1px solid #555; color:#2ecc71;">`
+                                capList.forEach(cap => hHTML += `<div style="margin-top:2px; display:flex; align-items:center; padding-right:2px;">
+                                    <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
+                                        <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
+                                            <span class="config-item-name" style="white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">- "${cap}"</span>
+                                        </div>
+                                    </div>
+                                    <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0; visibility:hidden;"><button class="collapse-btn" style="font-size:9px; padding:0;">(show)</button></div>
+                                    <div style="display:flex; align-items:center; flex-shrink:0;">
+                                        <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
+                                        <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
+                                            <input type="checkbox"><span class="config-switch-slider"></span>
+                                        </div>
+                                    </div>
+                                </div>`)
+                                hHTML += `</div>`
                             })
                             hHTML += `</div>`
                         })
                     } else {
-                        hHTML += `<div style="font-size:10px; color:#777; font-style:italic; padding-left:8px; margin-bottom:2px;">No caption groups</div>`
+                        hHTML += `<div style="font-size:10px; color:#777; font-style:italic; padding-left:6px; margin-bottom:2px;">No caption groups</div>`
                     }
                     hHTML += `</div>`
 
-                    // Transform Groups Assembly
+                    // transform groups assembly
                     const tgContainerId = `${groupsId}_tg`
                     const hasTGroups = Object.keys(tGroups).length > 0
-                    hHTML += buildAdvHTML(tgContainerId, `Transform Groups`, true, true, groupsId, true, '', hasTGroups)
-                    hHTML += `<div style="margin-top: 2px; margin-left: 8px; padding-left: 12px; border-left: 1px dashed #444;">`
+                    hHTML += buildAdvHTML(tgContainerId, `<span style="color:#ffffff;">Transform Groups</span>`, true, true, groupsId, true, '', hasTGroups)
+                    hHTML += `<div style="margin-top: 2px; margin-left: 6px; padding-left: 8px; border-left: 1px dashed #444;">`
                     
                     if (hasTGroups) {
                         Object.keys(tGroups).forEach(tgName => {
@@ -7627,23 +7632,32 @@ export function initConfigTabBindings() {
                             const tgCollapseId = `collapse_${tgId}`
                             
                             const objCnt = tGroups[tgName].length
-                            let elmTtl = 0
-                            tGroups[tgName].forEach(obj => {
-                                const fullData = obj.node.getAttr('transformGroupData') || {}
-                                let valStr = obj.name || obj.node.name() || `Object`
-                                const innerText = typeof obj.node.findOne === 'function' ? obj.node.findOne('.inner-text') : null
-                                if (innerText && typeof innerText.text === 'function' && innerText.text()) valStr = innerText.text()
-                                let tData = null
-                                if (fullData[valStr] && fullData[valStr].transformGroupData) tData = fullData[valStr].transformGroupData
-                                else if (Object.keys(fullData).some(k => !isNaN(k))) tData = fullData
-                                if (tData) elmTtl += Object.keys(tData).filter(k => !isNaN(k)).length
-                            })
-
-                            const metricsBtn = `<button class="collapse-btn" data-target="${tgCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">(show)</button>`
-                            hHTML += buildAdvHTML(tgId, `"${tgName}"`, true, true, tgContainerId, true, metricsBtn, true)
                             
-                            hHTML += `<div id="${tgCollapseId}" style="display:none; margin-left: 8px; padding-left: 12px; color:#aaa; font-family:monospace; font-size:10px; margin-top:2px; margin-bottom:4px;">`
-                            hHTML += `<div style="margin-bottom:4px;">"obj_cnt": [${objCnt}], "elm_ttl": [${elmTtl}]</div>`
+                            const objCntCollapseId = `collapse_obj_${tgId}`
+                            const objMetricsBtn = `<button class="collapse-btn" data-target="${objCntCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:0; padding:0;">(show)</button>`
+
+                            const metricsBtn = `<button class="collapse-btn" data-target="${tgCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:0; padding:0;">(show)</button>`
+                            hHTML += buildAdvHTML(tgId, `"${tgName}"`, true, true, tgContainerId, true, metricsBtn, true)
+
+                            hHTML += `<div id="${tgCollapseId}" style="display:none; margin-left: 6px; padding-left: 8px; color:#aaa; font-size:10px; margin-top:2px; margin-bottom:4px;">`
+                            hHTML += `<div style="margin-bottom:2px;">Total Objects: <span style="color:#2ecc71;">${objCnt}</span></div>`
+                            
+                            hHTML += `<div style="margin-bottom:2px; margin-left:6px; display:flex; align-items:center; padding-right:2px;">
+                                <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
+                                    <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
+                                        <span class="config-item-name" style="font-family:monospace; white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">"objects": [<span style="color:#2ecc71;">${objCnt}</span>]</span>
+                                    </div>
+                                </div>
+                                <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0;">${objMetricsBtn}</div>
+                                <div style="display:flex; align-items:center; flex-shrink:0;">
+                                    <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
+                                    <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
+                                        <input type="checkbox"><span class="config-switch-slider"></span>
+                                    </div>
+                                </div>
+                            </div>`
+                            
+                            hHTML += `<div id="${objCntCollapseId}" style="display:none; margin-left: 12px; padding-left: 8px; border-left: 1px solid #555; margin-top:2px; margin-bottom:4px;">`
                             
                             tGroups[tgName].forEach(obj => {
                                 const targetNode = obj.node
@@ -7658,20 +7672,49 @@ export function initConfigTabBindings() {
                                 else if (Object.keys(fullData).some(k => !isNaN(k))) tData = fullData
                                 const elmCnt = tData ? Object.keys(tData).filter(k => !isNaN(k)).length : 0
 
-                                hHTML += buildAdvHTML(objId, `"${valStr}"`, true, true, tgId, true, '', true)
-                                hHTML += `<div style="margin-left: 8px; padding-left: 12px; border-left: 1px solid #555; margin-top:2px;">"elm_cnt": [${elmCnt}]</div>`
+                                hHTML += buildAdvHTML(objId, `<span style="color:#2ecc71;">- "${valStr}"</span>`, true, true, tgId, true, '', true)
+                                hHTML += `<div style="margin-left: 6px; padding-left: 8px; border-left: 1px solid #555; margin-top:2px; margin-bottom:6px;">
+                                    <div style="display:flex; align-items:center; padding-right:2px;">
+                                        <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
+                                            <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
+                                                <span class="config-item-name" style="font-family:monospace; white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">"transformations-matrix":</span>
+                                            </div>
+                                        </div>
+                                        <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0; visibility:hidden;"><button class="collapse-btn" style="font-size:9px; padding:0;">(show)</button></div>
+                                        <div style="display:flex; align-items:center; flex-shrink:0;">
+                                            <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
+                                            <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
+                                                <input type="checkbox"><span class="config-switch-slider"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style="display:flex; align-items:center; padding-right:2px; margin-top:2px; margin-left:12px;">
+                                        <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
+                                            <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
+                                                <span class="config-item-name" style="font-family:monospace; white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">[<span style="color:#00a8ff;">${elmCnt}</span>]</span>
+                                            </div>
+                                        </div>
+                                        <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0; visibility:hidden;"><button class="collapse-btn" style="font-size:9px; padding:0;">(show)</button></div>
+                                        <div style="display:flex; align-items:center; flex-shrink:0;">
+                                            <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
+                                            <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
+                                                <input type="checkbox"><span class="config-switch-slider"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>`
                             })
-                            hHTML += `</div>`
+                            hHTML += `</div></div>`
                         })
                     } else {
-                        hHTML += `<div style="font-size:10px; color:#777; font-style:italic; padding-left:8px; margin-bottom:2px;">No transform groups</div>`
+                        hHTML += `<div style="font-size:10px; color:#777; font-style:italic; padding-left:6px; margin-bottom:2px;">No transform groups</div>`
                     }
-                    hHTML += `</div>` // close Transform Groups
+                    hHTML += `</div>` // close transform groups
 
-                    hHTML += `</div>` // close Groups
+                    hHTML += `</div>` // close groups
                 }
                 
-                hHTML += `</div>` // close Layer collapse container
+                hHTML += `</div>` // close layer collapse container
                 hHTML += `</div>` // close Layer card
             })
 
