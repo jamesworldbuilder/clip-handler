@@ -7263,7 +7263,7 @@ export function initConfigTabBindings() {
                         <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
                             <span class="config-item-name" style="white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">${item.label}</span>
                         </div>
-                        <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0; visibility:hidden;"><button class="collapse-btn" style="font-size:9px; padding:0;">(show)</button></div>
+                        <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0; visibility:hidden;"><button class="collapse-btn" style="font-size:9px; padding:0;">(show/hide)</button></div>
                         <div style="display:flex; align-items:center; flex-shrink:0;">
                             <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px;">
                                 <span class="config-val-display" id="val-disp-${item.id}" style="display:block; white-space:nowrap; overflow:hidden; width:100%; text-align:right; text-overflow:ellipsis;">-</span>
@@ -7497,8 +7497,8 @@ export function initConfigTabBindings() {
 
                 const layerExists = layerObjs.length > 0
                 const collapseId = `collapse_${layerId}`
-                const btnText = layerExists ? '(hide)' : '(show)'
-                const layerMetricsBtn = `<button class="collapse-btn" data-target="${collapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">${btnText}</button>`
+                const btnText = layerExists ? '(hide all)' : '(show all)'
+                const layerMetricsBtn = `<button class="collapse-btn toggle-all-btn" data-target="${collapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">${btnText}</button>`
 
                 hHTML += `<div id="${bucket.toLowerCase()}-layer-toggles" style="margin-bottom: 8px; padding: 6px 8px; background: #1a252f; border: 1px solid #34495e; border-radius: 4px;">`
                 hHTML += buildAdvHTML(layerId, `<span style="color:#ffffff;">${bucket} Layer</span>`, true, true, '', true, layerMetricsBtn, layerExists)
@@ -7581,7 +7581,8 @@ export function initConfigTabBindings() {
                                 const innerText = typeof obj.node.findOne === 'function' ? obj.node.findOne('.inner-text') : null
                                 if (innerText && typeof innerText.text === 'function' && innerText.text()) valStr = innerText.text()
                                 
-                                hHTML += buildAdvHTML(objId, `<span style="color:#2ecc71;">- "${valStr}"</span><span style="color:#aaa; font-family:monospace;">: {}</span>`, true, true, typeId, true, '', layerExists)
+                                const propStr = bucket === 'Filter' ? '{}' : '{Blocking, Styling}'
+                                hHTML += buildAdvHTML(objId, `<span style="color:#2ecc71;">- "${valStr}"</span><span style="color:#aaa; font-family:monospace;">: ${propStr}</span>`, true, true, typeId, true, '', layerExists)
                             })
                             hHTML += `</div></div>`
                         })
@@ -7727,7 +7728,7 @@ export function initConfigTabBindings() {
                                                 <span class="config-item-name" style="font-family:monospace; white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">"transformations-matrix":</span>
                                             </div>
                                         </div>
-                                        <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0; visibility:hidden;"><button class="collapse-btn" style="font-size:9px; padding:0;">(show)</button></div>
+                                        <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0; visibility:hidden;"><button class="collapse-btn" style="font-size:9px; padding:0;">(show/hide)</button></div>
                                         <div style="display:flex; align-items:center; flex-shrink:0;">
                                             <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
                                             <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
@@ -7741,7 +7742,7 @@ export function initConfigTabBindings() {
                                                 <span class="config-item-name" style="font-family:monospace; white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">[<span style="color:#00a8ff;">${elmCnt}</span>]</span>
                                             </div>
                                         </div>
-                                        <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0; visibility:hidden;"><button class="collapse-btn" style="font-size:9px; padding:0;">(show)</button></div>
+                                        <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0; visibility:hidden;"><button class="collapse-btn" style="font-size:9px; padding:0;">(show/hide)</button></div>
                                         <div style="display:flex; align-items:center; flex-shrink:0;">
                                             <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
                                             <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
@@ -7763,8 +7764,74 @@ export function initConfigTabBindings() {
                 }
                 
                 hHTML += `</div>` // close layer collapse container
-                hHTML += `</div>` // close Layer card
+                hHTML += `</div>` // close outer layer toggles wrapper
             })
+
+            // builds new object properties section dynamically from active nodes
+            const opCollapseId = `collapse_obj_props`
+            const opMetricsBtn = `<button class="collapse-btn toggle-all-btn" data-target="${opCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">(hide all)</button>`
+
+            hHTML += `<div id="object-properties-toggles" style="margin-bottom: 8px; padding: 6px 8px; background: #1a252f; border: 1px solid #34495e; border-radius: 4px;">`
+            hHTML += buildAdvHTML('layer_obj_props', `<span style="color:#ffffff;">Object Properties</span>`, true, true, '', true, opMetricsBtn, true)
+            hHTML += `<div id="${opCollapseId}" style="display:block; margin-top: 4px; margin-left: 6px; padding-left: 8px; border-left: 1px solid #34495e;">`
+            
+            const opGroups = { 'Text Objects': [], 'Image Objects': [], 'Shape Objects': [], 'Filter Objects': [] }
+            appLayers.forEach(layer => {
+                if (!layer.objects) return
+                const lName = layer.id
+                const tGroupNamesImg = new Set()
+                const tGroupNamesShape = new Set()
+
+                layer.objects.forEach(obj => {
+                    const tGroup = obj.node ? obj.node.getAttr('transformGroupName') : null
+                    if (lName === 'layer_text') opGroups['Text Objects'].push({ type: 'obj', obj })
+                    else if (lName === 'layer_filter') opGroups['Filter Objects'].push({ type: 'obj', obj })
+                    else if (lName === 'layer_image') {
+                        if (obj.node && obj.node.getClassName() === 'Image') {
+                            if (tGroup) tGroupNamesImg.add(tGroup)
+                            else opGroups['Image Objects'].push({ type: 'obj', obj })
+                        } else {
+                            if (tGroup) tGroupNamesShape.add(tGroup)
+                            else opGroups['Shape Objects'].push({ type: 'obj', obj })
+                        }
+                    }
+                })
+                tGroupNamesImg.forEach(tg => opGroups['Image Objects'].push({ type: 'tg', name: tg }))
+                tGroupNamesShape.forEach(tg => opGroups['Shape Objects'].push({ type: 'tg', name: tg }))
+            })
+
+            Object.keys(opGroups).forEach(cat => {
+                const items = opGroups[cat]
+                if (items.length === 0) return
+                
+                const catId = `op_cat_${cat.replace(/\s+/g, '')}`
+                const catCollapseId = `collapse_${catId}`
+                const catBtn = `<button class="collapse-btn" data-target="${catCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">(show)</button>`
+                
+                hHTML += buildAdvHTML(catId, `<span style="color:#ffffff;">${cat}</span>`, true, true, 'layer_obj_props', true, catBtn, true)
+                hHTML += `<div id="${catCollapseId}" style="display:none; margin-left: 12px; padding-left: 8px; border-left: 1px solid #555; margin-top:2px; margin-bottom:4px;">`
+                
+                items.forEach(item => {
+                    if (item.type === 'obj') {
+                        const obj = item.obj
+                        const objId = `op_obj_${obj.id || (obj.node && obj.node._id) || Math.random()}`
+                        let valStr = obj.name || (obj.node ? obj.node.name() : '') || `Object`
+                        const innerText = obj.node && typeof obj.node.findOne === 'function' ? obj.node.findOne('.inner-text') : null
+                        if (innerText && typeof innerText.text === 'function' && innerText.text()) valStr = innerText.text()
+                        
+                        let propsStr = cat === 'Filter Objects' ? '{}' : (cat === 'Text Objects' ? '{Blocking:{}, Styling:{}}' : '{Blocking, Styling}')
+                        hHTML += buildAdvHTML(objId, `"${valStr}": <span style="color:#aaa; font-family:monospace;">${propsStr}</span>`, true, true, catId, true, '', true)
+                    } else if (item.type === 'tg') {
+                        const tgId = `op_tg_${item.name.replace(/\W/g, '')}_${cat.replace(/\s+/g, '')}`
+                        const btn = `<button class="collapse-btn" data-target="collapse_${tgId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:0; padding:0;">(show)</button>`
+                        hHTML += buildAdvHTML(tgId, `"${item.name}": <span style="color:#aaa; font-family:monospace;">{Blocking, Styling}</span>`, true, true, catId, true, btn, true)
+                        hHTML += `<div id="collapse_${tgId}" style="display:none; margin-left: 12px; padding-left: 8px; border-left: 1px solid #555; margin-top:2px; margin-bottom:4px;"></div>`
+                    }
+                })
+                hHTML += `</div>`
+            })
+            
+            hHTML += `</div></div>`
 
             hierarchyContainer.innerHTML = hHTML
 
@@ -7777,7 +7844,22 @@ export function initConfigTabBindings() {
                     if (targetEl) {
                         const isHidden = targetEl.style.display === 'none'
                         targetEl.style.display = isHidden ? 'block' : 'none'
-                        btn.innerText = isHidden ? '(hide)' : '(show)'
+                        
+                        const isToggleAll = btn.classList.contains('toggle-all-btn')
+                        // Update button text: (show) when hidden, (hide) when shown
+                        btn.innerText = isHidden ? (isToggleAll ? '(hide all)' : '(hide)') : (isToggleAll ? '(show all)' : '(show)')
+                        
+                        if (isToggleAll) {
+                            const nestedBtns = targetEl.querySelectorAll('.collapse-btn:not(.toggle-all-btn)')
+                            nestedBtns.forEach(nBtn => {
+                                const nTarget = document.getElementById(nBtn.dataset.target)
+                                if (nTarget) {
+                                    nTarget.style.display = isHidden ? 'block' : 'none'
+                                    // Cascade labels for nested buttons
+                                    nBtn.innerText = isHidden ? '(hide)' : '(show)'
+                                }
+                            })
+                        }
                     }
                 }
             })
