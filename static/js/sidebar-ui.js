@@ -60,11 +60,11 @@ export function initMarqueeSystem() {
         span.textContent = el.tagName === 'INPUT' ? el.value : el.textContent
         
         document.body.appendChild(span)
-        const textWidth = span.clientWidth
+        const textWidth = span.getBoundingClientRect().width
         span.remove()
         
-        // evaluate and apply physics based purely on explicit string width
-        if (textWidth > cWidth + 2) {
+        // evaluate and apply physics based purely on exact string width, eliminating css ellipses completely
+        if (textWidth > cWidth) {
             const dist = cWidth - textWidth
             el.animate([
                 { textIndent: '0px', offset: 0 },
@@ -77,8 +77,6 @@ export function initMarqueeSystem() {
                 iterations: Infinity,
                 easing: 'linear'
             })
-        } else {
-            el.style.textOverflow = 'ellipsis'
         }
         
         el._lastCWidth = cWidth
@@ -7483,8 +7481,6 @@ export function initConfigTabBindings() {
             let hHTML = ''
             const targetBuckets = ['Text', 'Image', 'Filter', 'Background']
             
-            hHTML += `<div style="margin-bottom:6px; font-weight:bold; color:#aaa; font-size:11px; text-transform:uppercase;">Layers:</div>`
-            
             targetBuckets.forEach(bucket => {
                 const layerId = `layer_${bucket.toLowerCase()}`
                 
@@ -7535,49 +7531,68 @@ export function initConfigTabBindings() {
 
                     // formats independent objects hierarchy with array counts and dynamic bounding spacers
                     if (indObjs.length > 0) {
-                        const typeId = `${layerId}_ind`
-                        const indCollapseId = `collapse_ind_${layerId}`
-                        const objCnt = indObjs.length
-                        const objMetricsBtn = `<button class="collapse-btn" data-target="${indCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:0; padding:0;">(show)</button>`
-
-                        hHTML += buildAdvHTML(typeId, `<span style="color:#ffffff;">${bucket} Objects</span>`, true, true, layerId, true, '', layerExists)
-                        hHTML += `<div style="margin-top: 2px; margin-left: 6px; padding-left: 8px; border-left: 1px dashed #444; margin-bottom: 8px;">`
-                        
-                        hHTML += `<div style="margin-bottom:2px; color:#aaa; font-size:10px;">Total Objects: <span style="color:#2ecc71;">${objCnt}</span></div>`
-                        
-                        hHTML += `<div style="margin-bottom:2px; margin-left:6px; display:flex; align-items:center; padding-right:2px;">
-                            <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
-                                <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
-                                    <span class="config-item-name" style="font-family:monospace; white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis; color:#aaa; font-size:10px;">"objects": [<span style="color:#2ecc71;">${objCnt}</span>]</span>
-                                </div>
-                            </div>
-                            <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0;">${objMetricsBtn}</div>
-                            <div style="display:flex; align-items:center; flex-shrink:0;">
-                                <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
-                                <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
-                                    <input type="checkbox"><span class="config-switch-slider"></span>
-                                </div>
-                            </div>
-                        </div>`
-                        
-                        hHTML += `<div id="${indCollapseId}" style="display:none; margin-left: 12px; padding-left: 8px; border-left: 1px solid #555; margin-top:2px; margin-bottom:4px;">`
-                        
+                        const groupedIndObjs = {}
                         indObjs.forEach(obj => {
-                            const objId = `obj_${obj.id || obj.node._id}`
-                            let valStr = obj.name || obj.node.name() || `Object`
-                            const innerText = typeof obj.node.findOne === 'function' ? obj.node.findOne('.inner-text') : null
-                            if (innerText && typeof innerText.text === 'function' && innerText.text()) valStr = innerText.text()
-                            
-                            hHTML += buildAdvHTML(objId, `<span style="color:#2ecc71;">- "${valStr}"</span><span style="color:#aaa; font-family:monospace;">: {}</span>`, true, true, typeId, true, '', layerExists)
+                            let subBucket = `${bucket} Objects`
+                            if (bucket === 'Image') {
+                                if (obj.node && obj.node.getClassName() === 'Image') {
+                                    subBucket = 'Image Objects'
+                                } else {
+                                    subBucket = 'Shape Objects'
+                                }
+                            }
+                            if (!groupedIndObjs[subBucket]) groupedIndObjs[subBucket] = []
+                            groupedIndObjs[subBucket].push(obj)
                         })
-                        hHTML += `</div></div>`
+
+                        Object.keys(groupedIndObjs).forEach(subBucketName => {
+                            const subObjs = groupedIndObjs[subBucketName]
+                            const safeBucketId = subBucketName.replace(/\s+/g, '').toLowerCase()
+                            const typeId = `${layerId}_${safeBucketId}`
+                            const indCollapseId = `collapse_ind_${typeId}`
+                            const objCnt = subObjs.length
+                            const objMetricsBtn = `<button class="collapse-btn" data-target="${indCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:0; padding:0;">(show)</button>`
+
+                            hHTML += buildAdvHTML(typeId, `<span style="color:#ffffff;">${subBucketName}</span>`, true, true, layerId, true, '', layerExists)
+                            hHTML += `<div style="margin-top: 2px; margin-left: 6px; padding-left: 8px; border-left: 1px dashed #444; margin-bottom: 8px;">`
+                            
+                            hHTML += `<div style="margin-bottom:2px; color:#aaa; font-size:10px;">Total Objects: <span style="color:#2ecc71;">${objCnt}</span></div>`
+                            
+                            hHTML += `<div style="margin-bottom:2px; margin-left:6px; display:flex; align-items:center; padding-right:2px;">
+                                <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
+                                    <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
+                                        <span class="config-item-name" style="font-family:monospace; white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis; color:#aaa; font-size:10px;">"objects": [<span style="color:#2ecc71;">${objCnt}</span>]</span>
+                                    </div>
+                                </div>
+                                <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0;">${objMetricsBtn}</div>
+                                <div style="display:flex; align-items:center; flex-shrink:0;">
+                                    <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
+                                    <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
+                                        <input type="checkbox"><span class="config-switch-slider"></span>
+                                    </div>
+                                </div>
+                            </div>`
+                            
+                            hHTML += `<div id="${indCollapseId}" style="display:none; margin-left: 12px; padding-left: 8px; border-left: 1px solid #555; margin-top:2px; margin-bottom:4px;">`
+                            
+                            subObjs.forEach(obj => {
+                                const objId = `obj_${obj.id || obj.node._id}`
+                                let valStr = obj.name || obj.node.name() || `Object`
+                                const innerText = typeof obj.node.findOne === 'function' ? obj.node.findOne('.inner-text') : null
+                                if (innerText && typeof innerText.text === 'function' && innerText.text()) valStr = innerText.text()
+                                
+                                hHTML += buildAdvHTML(objId, `<span style="color:#2ecc71;">- "${valStr}"</span><span style="color:#aaa; font-family:monospace;">: {}</span>`, true, true, typeId, true, '', layerExists)
+                            })
+                            hHTML += `</div></div>`
+                        })
                     }
 
                     // groups assembly
-                    const groupsId = `${layerId}_groups`
-                    const hasGroups = Object.keys(cGroups).length > 0 || Object.keys(tGroups).length > 0
-                    hHTML += buildAdvHTML(groupsId, `<span style="color:#ffffff;">Groups</span>`, true, true, layerId, true, '', hasGroups)
-                    hHTML += `<div style="margin-top: 2px; margin-left: 6px; padding-left: 8px; border-left: 1px solid #34495e;">`
+                    if (bucket !== 'Filter') {
+                        const groupsId = `${layerId}_groups`
+                        const hasGroups = Object.keys(cGroups).length > 0 || Object.keys(tGroups).length > 0
+                        hHTML += buildAdvHTML(groupsId, `<span style="color:#ffffff;">Groups</span>`, true, true, layerId, true, '', hasGroups)
+                        hHTML += `<div style="margin-top: 2px; margin-left: 6px; padding-left: 8px; border-left: 1px solid #34495e;">`
 
                     // caption groups assembly
                     const cgContainerId = `${groupsId}_cg`
@@ -7658,7 +7673,12 @@ export function initConfigTabBindings() {
                             const tgId = `tg_${tgName.replace(/\W/g, '')}`
                             const tgCollapseId = `collapse_${tgId}`
                             
-                            const objCnt = tGroups[tgName].length
+                            // excludes the parent group container from being listed as its own child
+                            const childObjs = tGroups[tgName].filter(obj => {
+                                const nName = obj.name || (obj.node && obj.node.name()) || ''
+                                return nName !== tgName
+                            })
+                            const objCnt = childObjs.length
                             
                             const objCntCollapseId = `collapse_obj_${tgId}`
                             const objMetricsBtn = `<button class="collapse-btn" data-target="${objCntCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:0; padding:0;">(show)</button>`
@@ -7666,7 +7686,7 @@ export function initConfigTabBindings() {
                             const metricsBtn = `<button class="collapse-btn" data-target="${tgCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:0; padding:0;">(show)</button>`
                             hHTML += buildAdvHTML(tgId, `"${tgName}"`, true, true, tgContainerId, true, metricsBtn, true)
 
-                            hHTML += `<div id="${tgCollapseId}" style="display:none; margin-left: 6px; padding-left: 8px; color:#aaa; font-size:10px; margin-top:2px; margin-bottom:4px;">`
+                            hHTML += `<div id="${tgCollapseId}" style="display:none; margin-left: 6px; padding-left: 8px; border-left: 1px solid #555; color:#aaa; font-size:10px; margin-top:2px; margin-bottom:4px;">`
                             hHTML += `<div style="margin-bottom:2px;">Total Objects: <span style="color:#2ecc71;">${objCnt}</span></div>`
                             
                             hHTML += `<div style="margin-bottom:2px; margin-left:6px; display:flex; align-items:center; padding-right:2px;">
@@ -7686,7 +7706,7 @@ export function initConfigTabBindings() {
                             
                             hHTML += `<div id="${objCntCollapseId}" style="display:none; margin-left: 12px; padding-left: 8px; border-left: 1px solid #555; margin-top:2px; margin-bottom:4px;">`
                             
-                            tGroups[tgName].forEach(obj => {
+                            childObjs.forEach(obj => {
                                 const targetNode = obj.node
                                 const objId = `obj_${obj.id || targetNode._id}`
                                 let valStr = obj.name || targetNode.name() || `Object`
@@ -7700,7 +7720,7 @@ export function initConfigTabBindings() {
                                 const elmCnt = tData ? Object.keys(tData).filter(k => !isNaN(k)).length : 0
 
                                 hHTML += buildAdvHTML(objId, `<span style="color:#2ecc71;">- "${valStr}"</span>`, true, true, tgId, true, '', true)
-                                hHTML += `<div style="margin-left: 6px; padding-left: 8px; border-left: 1px solid #555; margin-top:2px; margin-bottom:6px;">
+                                hHTML += `<div style="margin-left: 6px; padding-left: 8px; margin-top:2px; margin-bottom:6px;">
                                     <div style="display:flex; align-items:center; padding-right:2px;">
                                         <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
                                             <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
@@ -7739,6 +7759,7 @@ export function initConfigTabBindings() {
                     hHTML += `</div>` // close transform groups
 
                     hHTML += `</div>` // close groups
+                    } // closes bucket filter logic
                 }
                 
                 hHTML += `</div>` // close layer collapse container
