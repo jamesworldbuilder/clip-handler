@@ -30,12 +30,14 @@ export function initMarqueeSystem() {
             el.getAnimations().forEach(a => a.cancel())
             el.style.textIndent = '0px'
             el.style.textOverflow = 'clip'
+            if (el.classList.contains('config-val-display')) el.style.textAlign = 'right'
             return
         }
 
         const cWidth = el.clientWidth
         if (cWidth === 0) {
             el.getAnimations().forEach(a => a.cancel())
+            if (el.classList.contains('config-val-display')) el.style.textAlign = 'right'
             el._lastCWidth = 0
             return
         }
@@ -65,18 +67,23 @@ export function initMarqueeSystem() {
         
         // evaluate and apply physics based purely on exact string width, eliminating css ellipses completely
         if (textWidth > cWidth) {
-            const dist = cWidth - textWidth
+            el.style.textAlign = 'left' // forces left-alignment so the text-indent anchors properly from the left boundary
+            const dist = cWidth - textWidth - 24 // extended buffer explicitly guarantees right side clears the visible boundary
             el.animate([
                 { textIndent: '0px', offset: 0 },
                 { textIndent: '0px', offset: 0.15 },
                 { textIndent: `${dist}px`, offset: 0.85 },
                 { textIndent: `${dist}px`, offset: 1 }
             ], {
-                duration: 2000,
+                duration: 3500, // smooths reading pace for extended offset
                 direction: 'alternate',
                 iterations: Infinity,
                 easing: 'linear'
             })
+        } else {
+            if (el.classList.contains('config-val-display')) {
+                el.style.textAlign = 'right'
+            }
         }
         
         el._lastCWidth = cWidth
@@ -7247,12 +7254,17 @@ export function initConfigTabBindings() {
         <div id="config-categories-wrap" style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px;">`
 
     Object.keys(configCategories).forEach(cat => {
+        const sectIdAttr = cat === 'Project Hierarchy' ? 'id="config-sect-1"' : ''
+        let sectBtn = ''
+        if (cat === 'Project Hierarchy') {
+            sectBtn = `<button class="collapse-btn sect-toggle-btn" data-target="dynamic-project-hierarchy-container" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">(expand)</button>`
+        }
         configUI += `<div class="config-category">
-            <div style="font-size:12px; font-weight:bold; color:#00a8ff; margin-bottom:6px; text-transform:uppercase;">${cat}</div>
+            <div ${sectIdAttr} style="font-size:12px; font-weight:bold; color:#00a8ff; margin-bottom:6px; text-transform:uppercase; display:flex; align-items:center;">${cat} ${sectBtn}</div>
             <div style="display:flex; flex-direction:column; gap:2px;">`
         
         if (cat === "Project Hierarchy") {
-            configUI += `<div id="dynamic-project-hierarchy-container"></div>`
+            configUI += `<div id="dynamic-project-hierarchy-container" style="display:block;"></div>`
         } else {
             configCategories[cat].forEach(item => {
                 const indentStyle = item.parent ? 'margin-left:12px; border-left:1px solid #444; padding-left:8px;' : ''
@@ -7291,6 +7303,34 @@ export function initConfigTabBindings() {
 
     configTab.innerHTML = ''
     configTab.insertAdjacentHTML('beforeend', configUI)
+
+    // Bind sect-toggle-btn master logic for static config categories
+    configTab.querySelectorAll('.sect-toggle-btn').forEach(btn => {
+        btn.onclick = (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            const targetEl = document.getElementById(btn.dataset.target)
+            if (targetEl) {
+                if (btn.innerText === '(expand)') {
+                    const nestedBtns = targetEl.querySelectorAll('.collapse-btn:not(.sect-toggle-btn)')
+                    nestedBtns.forEach(nBtn => {
+                        const nTarget = document.getElementById(nBtn.dataset.target)
+                        if (nTarget) nTarget.style.display = 'block'
+                        nBtn.innerText = '(hide)'
+                    })
+                    btn.innerText = '(hide)'
+                } else {
+                    const nestedBtns = targetEl.querySelectorAll('.collapse-btn:not(.sect-toggle-btn)')
+                    nestedBtns.forEach(nBtn => {
+                        const nTarget = document.getElementById(nBtn.dataset.target)
+                        if (nTarget) nTarget.style.display = 'none'
+                        nBtn.innerText = '(show)'
+                    })
+                    btn.innerText = '(expand)'
+                }
+            }
+        }
+    })
 
     // Generates HTML strictly formatted with toggles on the right for dynamic components
     const buildAdvHTML = (id, label, val, isParent, parentId = '', preserveName = false, extraHtml = '', isChecked = true) => {
@@ -7354,14 +7394,6 @@ export function initConfigTabBindings() {
     // scans available ui bounds and maps appropriate scrolling animations
     const applyMarqueeEffects = (container) => {
         container.querySelectorAll('.config-item-name, .config-val-display').forEach(el => {
-            el.style.display = 'block'
-            el.style.width = '100%'
-            el.style.overflow = 'hidden'
-            
-            if (el.classList.contains('config-val-display')) {
-                el.style.textAlign = 'right'
-            }
-
             if (window.marqueeObserver) window.marqueeObserver.observe(el)
             if (window.applyMarquee) setTimeout(() => window.applyMarquee(el), 50)
         })
@@ -7497,13 +7529,12 @@ export function initConfigTabBindings() {
 
                 const layerExists = layerObjs.length > 0
                 const collapseId = `collapse_${layerId}`
-                const btnText = layerExists ? '(hide all)' : '(show all)'
-                const layerMetricsBtn = `<button class="collapse-btn toggle-all-btn" data-target="${collapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">${btnText}</button>`
+                const layerMetricsBtn = `<button class="collapse-btn" data-target="${collapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">(show)</button>`
 
                 hHTML += `<div id="${bucket.toLowerCase()}-layer-toggles" style="margin-bottom: 8px; padding: 6px 8px; background: #1a252f; border: 1px solid #34495e; border-radius: 4px;">`
                 hHTML += buildAdvHTML(layerId, `<span style="color:#ffffff;">${bucket} Layer</span>`, true, true, '', true, layerMetricsBtn, layerExists)
                 
-                hHTML += `<div id="${collapseId}" style="display:${layerExists ? 'block' : 'none'}; margin-top: 4px; margin-left: 6px; padding-left: 8px; border-left: 1px solid #34495e;">`
+                hHTML += `<div id="${collapseId}" style="display:none; margin-top: 4px; margin-left: 6px; padding-left: 8px; border-left: 1px solid #34495e;">`
                 
                 if (bucket === 'Background') {
                     const rawVideoId = `${layerId}_rawvideo`
@@ -7769,11 +7800,11 @@ export function initConfigTabBindings() {
 
             // builds new object properties section dynamically from active nodes
             const opCollapseId = `collapse_obj_props`
-            const opMetricsBtn = `<button class="collapse-btn toggle-all-btn" data-target="${opCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">(hide all)</button>`
+            const opMetricsBtn = `<button class="collapse-btn sect-toggle-btn" data-target="${opCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">(expand)</button>`
 
-            hHTML += `<div id="object-properties-toggles" style="margin-bottom: 8px; padding: 6px 8px; background: #1a252f; border: 1px solid #34495e; border-radius: 4px;">`
-            hHTML += buildAdvHTML('layer_obj_props', `<span style="color:#ffffff;">Object Properties</span>`, true, true, '', true, opMetricsBtn, true)
-            hHTML += `<div id="${opCollapseId}" style="display:block; margin-top: 4px; margin-left: 6px; padding-left: 8px; border-left: 1px solid #34495e;">`
+            hHTML += `<div id="object-properties-toggles" style="margin-bottom: 8px; padding: 0;">`
+            hHTML += `<div id="config-sect-2" style="font-size:12px; font-weight:bold; color:#00a8ff; margin-bottom:6px; text-transform:uppercase; display:flex; align-items:center;">OBJECT PROPERTIES ${opMetricsBtn}</div>`
+            hHTML += `<div id="${opCollapseId}" style="display:block; margin-top: 4px; margin-left: 0; padding-left: 0;">`
             
             const opGroups = { 'Text Objects': [], 'Image Objects': [], 'Shape Objects': [], 'Filter Objects': [] }
             appLayers.forEach(layer => {
@@ -7808,8 +7839,9 @@ export function initConfigTabBindings() {
                 const catCollapseId = `collapse_${catId}`
                 const catBtn = `<button class="collapse-btn" data-target="${catCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">(show)</button>`
                 
+                hHTML += `<div id="${catId}-toggles" style="margin-bottom: 8px; padding: 6px 8px; background: #1a252f; border: 1px solid #34495e; border-radius: 4px;">`
                 hHTML += buildAdvHTML(catId, `<span style="color:#ffffff;">${cat}</span>`, true, true, 'layer_obj_props', true, catBtn, true)
-                hHTML += `<div id="${catCollapseId}" style="display:none; margin-left: 12px; padding-left: 8px; border-left: 1px solid #555; margin-top:2px; margin-bottom:4px;">`
+                hHTML += `<div id="${catCollapseId}" style="display:none; margin-top: 4px; margin-left: 6px; padding-left: 8px; border-left: 1px solid #34495e;">`
                 
                 items.forEach(item => {
                     if (item.type === 'obj') {
@@ -7828,43 +7860,98 @@ export function initConfigTabBindings() {
                         hHTML += `<div id="collapse_${tgId}" style="display:none; margin-left: 12px; padding-left: 8px; border-left: 1px solid #555; margin-top:2px; margin-bottom:4px;"></div>`
                     }
                 })
-                hHTML += `</div>`
+                hHTML += `</div></div>`
             })
             
             hHTML += `</div></div>`
 
             hierarchyContainer.innerHTML = hHTML
 
-            // Activates native show/hide payload mechanics without interfering with global DOM
+            // Activates native show/hide payload mechanics and implements 3-state expand logic
             hierarchyContainer.querySelectorAll('.collapse-btn').forEach(btn => {
                 btn.onclick = (e) => {
                     e.preventDefault()
                     e.stopPropagation()
                     const targetEl = document.getElementById(btn.dataset.target)
                     if (targetEl) {
-                        const isHidden = targetEl.style.display === 'none'
-                        targetEl.style.display = isHidden ? 'block' : 'none'
+                        if (btn.classList.contains('sect-toggle-btn')) {
+                            if (btn.innerText === '(expand)') {
+                                const nestedBtns = targetEl.querySelectorAll('.collapse-btn:not(.sect-toggle-btn)')
+                                nestedBtns.forEach(nBtn => {
+                                    const nTarget = document.getElementById(nBtn.dataset.target)
+                                    if (nTarget) nTarget.style.display = 'block'
+                                    nBtn.innerText = '(hide)'
+                                })
+                                btn.innerText = '(hide)'
+                            } else {
+                                const nestedBtns = targetEl.querySelectorAll('.collapse-btn:not(.sect-toggle-btn)')
+                                nestedBtns.forEach(nBtn => {
+                                    const nTarget = document.getElementById(nBtn.dataset.target)
+                                    if (nTarget) nTarget.style.display = 'none'
+                                    nBtn.innerText = '(show)'
+                                })
+                                btn.innerText = '(expand)'
+                            }
+                            return
+                        }
+
+                        const hasNestedLinks = targetEl.querySelector('.collapse-btn') !== null
                         
-                        const isToggleAll = btn.classList.contains('toggle-all-btn')
-                        // Update button text: (show) when hidden, (hide) when shown
-                        btn.innerText = isHidden ? (isToggleAll ? '(hide all)' : '(hide)') : (isToggleAll ? '(show all)' : '(show)')
-                        
-                        if (isToggleAll) {
-                            const nestedBtns = targetEl.querySelectorAll('.collapse-btn:not(.toggle-all-btn)')
+                        if (btn.innerText === '(show)') {
+                            targetEl.style.display = 'block'
+                            
+                            const hasHiddenNested = Array.from(targetEl.querySelectorAll('.collapse-btn')).every(nBtn => {
+                                const nTarget = document.getElementById(nBtn.dataset.target)
+                                return nTarget && nTarget.style.display === 'none'
+                            })
+                            btn.innerText = (hasNestedLinks && hasHiddenNested) ? '(expand)' : '(hide)'
+                        }
+                        else if (btn.innerText === '(expand)') {
+                            const nestedBtns = targetEl.querySelectorAll('.collapse-btn')
                             nestedBtns.forEach(nBtn => {
                                 const nTarget = document.getElementById(nBtn.dataset.target)
-                                if (nTarget) {
-                                    nTarget.style.display = isHidden ? 'block' : 'none'
-                                    // Cascade labels for nested buttons
-                                    nBtn.innerText = isHidden ? '(hide)' : '(show)'
-                                }
+                                if (nTarget) nTarget.style.display = 'block'
+                                nBtn.innerText = '(hide)'
                             })
+                            btn.innerText = '(hide)'
+                        } 
+                        else {
+                            targetEl.style.display = 'none'
+                            btn.innerText = '(show)'
                         }
                     }
                 }
             })
 
+            // Initializes button texts accurately on load based on their initial HTML visibility states
+            hierarchyContainer.querySelectorAll('.collapse-btn').forEach(btn => {
+                const targetEl = document.getElementById(btn.dataset.target)
+                if (targetEl) {
+                    if (btn.classList.contains('sect-toggle-btn')) {
+                        btn.innerText = '(expand)'
+                        return
+                    }
+
+                    const isHidden = targetEl.style.display === 'none'
+                    if (isHidden) {
+                        btn.innerText = '(show)'
+                    } else {
+                        const hasNestedLinks = targetEl.querySelector('.collapse-btn') !== null
+                        const hasHiddenNested = Array.from(targetEl.querySelectorAll('.collapse-btn')).every(nBtn => {
+                            const nTarget = document.getElementById(nBtn.dataset.target)
+                            return nTarget && nTarget.style.display === 'none'
+                        })
+                        btn.innerText = (hasNestedLinks && hasHiddenNested) ? '(expand)' : '(hide)'
+                    }
+                }
+            })
+
             bindDynamicCheckboxes(hierarchyContainer)
+            
+            const projBtn = document.querySelector('#config-sect-1 .sect-toggle-btn')
+            if (projBtn) {
+                projBtn.innerText = '(expand)'
+            }
         }
 
         applyMarqueeEffects(configTab)
