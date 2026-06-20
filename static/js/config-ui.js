@@ -218,7 +218,7 @@ export function initConfigTabBindings() {
 
     // scans available ui bounds and maps appropriate scrolling animations
     const applyMarqueeEffects = (container) => {
-        container.querySelectorAll('.config-item-name, .config-val-display').forEach(el => {
+        container.querySelectorAll('.config-item-name, .config-val-display, .config-item-value, .config-item-blocking, .config-item-styling').forEach(el => {
             if (window.marqueeObserver) window.marqueeObserver.observe(el)
             if (window.applyMarquee) setTimeout(() => window.applyMarquee(el), 50)
         })
@@ -359,7 +359,7 @@ export function initConfigTabBindings() {
                 const layerMetricsBtn = `<button class="collapse-btn" data-target="${collapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:6px; padding:0;">(show)</button>`
 
                 hHTML += `<div id="${bucket.toLowerCase()}-layer-toggles" style="margin-bottom: 8px; padding: 6px 8px; background: #1a252f; border: 1px solid #34495e; border-radius: 4px;">`
-                hHTML += buildAdvHTML(layerId, `<span style="color:#444; margin-right:4px;">|</span><span style="color:#ffffff;">${bucket} Layer</span>`, true, true, '', true, layerMetricsBtn, layerExists)
+                hHTML += buildAdvHTML(layerId, `<span style="color:#ffffff;">${bucket} Layer</span>`, true, true, 'project_hierarchy', true, layerMetricsBtn, layerExists)
                 
                 hHTML += `<div id="${collapseId}" style="display:none; margin-top: 4px; margin-left: 6px; padding-left: 8px; border-left: 1px solid #34495e;">`
                 
@@ -416,7 +416,7 @@ export function initConfigTabBindings() {
                             
                             hHTML += `<div style="margin-bottom:2px; color:#aaa; font-size:10px;">Total Objects: <span style="color:#2ecc71;">${objCnt}</span></div>`
                             
-                            hHTML += `<div style="margin-bottom:2px; margin-left:6px; display:flex; align-items:center; padding-right:2px;">
+                            hHTML += `<div style="margin-bottom:2px; margin-left:0; display:flex; align-items:center; padding-right:2px;">
                                 <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
                                     <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
                                         <span class="config-item-name" style="font-family:monospace; white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis; color:#aaa; font-size:10px;">"objects": [<span style="color:#2ecc71;">${objCnt}</span>]</span>
@@ -431,19 +431,25 @@ export function initConfigTabBindings() {
                                 </div>
                             </div>`
                             
-                            hHTML += `<div id="${indCollapseId}" style="display:none; margin-left: 12px; padding-left: 8px; border-left: 1px solid #555; margin-top:2px; margin-bottom:4px;">`
+                            hHTML += `<div id="${indCollapseId}" style="display:none; margin-top:2px; margin-bottom:4px;">`
                             
                             subObjs.forEach(obj => {
-                                const objId = `obj_${obj.id || obj.node._id}`
-                                let valStr = obj.name || obj.node.name() || `Object`
-                                const innerText = typeof obj.node.findOne === 'function' ? obj.node.findOne('.inner-text') : null
-                                if (innerText && typeof innerText.text === 'function' && innerText.text()) valStr = innerText.text()
+                                const rawId = obj.id || obj.node._id
+                                const objId = `obj_${rawId}`
+                                const displayId = obj.id || (obj.node && obj.node.id()) || 'Object'
                                 
-                                const propStr = bucket === 'Filter' ? '{}' : '{Blocking, Styling}'
-                                hHTML += buildAdvHTML(objId, `<span style="color:#2ecc71;">- "${valStr}"</span><span style="color:#aaa; font-family:monospace;">: ${propStr}</span>`, true, true, typeId, true, '', layerExists)
+                                let propStr = '{}'
+                                if (bucket !== 'Filter') {
+                                    const opObjId = `op_obj_${rawId}`
+                                    propStr = `{<a href="#" class="jump-prop-link" data-target-id="${opObjId}" style="color:#00a8ff; text-decoration:none;">Blocking</a>, <a href="#" class="jump-prop-link" data-target-id="${opObjId}" style="color:#00a8ff; text-decoration:none;">Styling</a>}`
+                                }
+                                
+                                hHTML += buildAdvHTML(objId, `<span style="color:#2ecc71;">- "${displayId}"</span><span style="color:#aaa; font-family:monospace;">: ${propStr}</span>`, true, true, typeId, true, '', layerExists)
                             })
                             hHTML += `</div></div>`
                         })
+                    } else if (bucket === 'Filter') {
+                        hHTML += `<div style="font-size:10px; color:#777; font-style:italic; padding-left:6px; margin-bottom:2px;">No filter objects</div>`
                     }
 
                     // groups assembly
@@ -483,7 +489,7 @@ export function initConfigTabBindings() {
                                 const capCollapseId = `collapse_cap_${objId}`
                                 const capBtn = `<button class="collapse-btn" data-target="${capCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:0; padding:0;">(show)</button>`
                                 
-                                hHTML += `<div style="margin-bottom:2px; margin-left:6px; display:flex; align-items:center; padding-right:2px;">
+                                hHTML += `<div style="margin-bottom:2px; margin-left:0; display:flex; align-items:center; padding-right:2px;">
                                     <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
                                         <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
                                             <span class="config-item-name" style="font-family:monospace; white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">"captionsList": [<span style="color:#2ecc71;">${capList.length}</span>]</span>
@@ -497,7 +503,7 @@ export function initConfigTabBindings() {
                                         </div>
                                     </div>
                                 </div>`
-                                hHTML += `<div id="${capCollapseId}" style="display:none; margin-left:12px; padding-left:8px; border-left:1px solid #555; color:#2ecc71;">`
+                                hHTML += `<div id="${capCollapseId}" style="display:none; margin-left:6px; padding-left:8px; border-left:1px solid #555; color:#2ecc71;">`
                                 capList.forEach(cap => hHTML += `<div style="margin-top:2px; display:flex; align-items:center; padding-right:2px;">
                                     <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
                                         <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
@@ -532,8 +538,9 @@ export function initConfigTabBindings() {
                             const tgId = `tg_${tgName.replace(/\W/g, '')}`
                             const tgCollapseId = `collapse_${tgId}`
                             
-                            // excludes the parent group container from being listed as its own child
+                            // excludes the parent group container from being listed as its own child except for Image and Shape Objects
                             const childObjs = tGroups[tgName].filter(obj => {
+                                if (bucket === 'Image' && obj.node && obj.node.getClassName() !== 'Group') return true
                                 const nName = obj.name || (obj.node && obj.node.name()) || ''
                                 return nName !== tgName
                             })
@@ -545,10 +552,10 @@ export function initConfigTabBindings() {
                             const metricsBtn = `<button class="collapse-btn" data-target="${tgCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:0; padding:0;">(show)</button>`
                             hHTML += buildAdvHTML(tgId, `"${tgName}"`, true, true, tgContainerId, true, metricsBtn, true)
 
-                            hHTML += `<div id="${tgCollapseId}" style="display:none; margin-left: 6px; padding-left: 8px; border-left: 1px solid #555; color:#aaa; font-size:10px; margin-top:2px; margin-bottom:4px;">`
+                            hHTML += `<div id="${tgCollapseId}" style="display:none; margin-left: 6px; padding-left: 8px; border-left: 1px dashed #444; color:#aaa; font-size:10px; margin-top:2px; margin-bottom:4px;">`
                             hHTML += `<div style="margin-bottom:2px;">Total Objects: <span style="color:#2ecc71;">${objCnt}</span></div>`
                             
-                            hHTML += `<div style="margin-bottom:2px; margin-left:6px; display:flex; align-items:center; padding-right:2px;">
+                            hHTML += `<div style="margin-bottom:2px; margin-left:0; display:flex; align-items:center; padding-right:2px;">
                                 <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
                                     <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
                                         <span class="config-item-name" style="font-family:monospace; white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">"objects": [<span style="color:#2ecc71;">${objCnt}</span>]</span>
@@ -563,52 +570,30 @@ export function initConfigTabBindings() {
                                 </div>
                             </div>`
                             
-                            hHTML += `<div id="${objCntCollapseId}" style="display:none; margin-left: 12px; padding-left: 8px; border-left: 1px solid #555; margin-top:2px; margin-bottom:4px;">`
+                            hHTML += `<div id="${objCntCollapseId}" style="display:none; margin-top:2px; margin-bottom:4px;">`
                             
                             childObjs.forEach(obj => {
                                 const targetNode = obj.node
                                 const objId = `obj_${obj.id || targetNode._id}`
+                                const displayId = obj.id || (targetNode && targetNode.id()) || 'Object'
                                 let valStr = obj.name || targetNode.name() || `Object`
                                 const innerText = typeof targetNode.findOne === 'function' ? targetNode.findOne('.inner-text') : null
-                                if (innerText && typeof innerText.text === 'function' && innerText.text()) valStr = innerText.text()
                                 
                                 const fullData = targetNode.getAttr('transformGroupData') || {}
+                                
+                                if (innerText && typeof innerText.text === 'function' && innerText.text()) {
+                                    valStr = innerText.text()
+                                } else {
+                                    const keys = Object.keys(fullData).filter(k => isNaN(k))
+                                    if (keys.length > 0) valStr = keys[0]
+                                }
+                                
                                 let tData = null
                                 if (fullData[valStr] && fullData[valStr].transformGroupData) tData = fullData[valStr].transformGroupData
                                 else if (Object.keys(fullData).some(k => !isNaN(k))) tData = fullData
                                 const elmCnt = tData ? Object.keys(tData).filter(k => !isNaN(k)).length : 0
 
-                                hHTML += buildAdvHTML(objId, `<span style="color:#2ecc71;">- "${valStr}"</span>`, true, true, tgId, true, '', true)
-                                hHTML += `<div style="margin-left: 6px; padding-left: 8px; margin-top:2px; margin-bottom:6px;">
-                                    <div style="display:flex; align-items:center; padding-right:2px;">
-                                        <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
-                                            <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
-                                                <span class="config-item-name" style="font-family:monospace; white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">"transformations-matrix":</span>
-                                            </div>
-                                        </div>
-                                        <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0; visibility:hidden;"><button class="collapse-btn" style="font-size:9px; padding:0;">(show/hide)</button></div>
-                                        <div style="display:flex; align-items:center; flex-shrink:0;">
-                                            <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
-                                            <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
-                                                <input type="checkbox"><span class="config-switch-slider"></span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div style="display:flex; align-items:center; padding-right:2px; margin-top:2px; margin-left:12px;">
-                                        <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
-                                            <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
-                                                <span class="config-item-name" style="font-family:monospace; white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">[<span style="color:#00a8ff;">${elmCnt}</span>]</span>
-                                            </div>
-                                        </div>
-                                        <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0; visibility:hidden;"><button class="collapse-btn" style="font-size:9px; padding:0;">(show/hide)</button></div>
-                                        <div style="display:flex; align-items:center; flex-shrink:0;">
-                                            <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
-                                            <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
-                                                <input type="checkbox"><span class="config-switch-slider"></span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>`
+                                hHTML += buildAdvHTML(objId, `<span style="color:#2ecc71;">- "${displayId}"</span><span style="color:#aaa; font-family:monospace;">: {"transformations-matrix": [<span style="color:#00a8ff;">${elmCnt}</span>]}</span>`, true, true, tgId, true, '', true)
                             })
                             hHTML += `</div></div>`
                         })
@@ -670,20 +655,59 @@ export function initConfigTabBindings() {
                 hHTML += `<div id="${catCollapseId}" style="display:none; margin-top: 4px; margin-left: 6px; padding-left: 8px; border-left: 1px solid #34495e;">`
                 
                 items.forEach(item => {
+                    const getPropRow = (cls, content) => {
+                        return `<div style="margin-bottom:2px; margin-left:6px; padding-left:6px; border-left:1px dashed #444;">
+                            <div style="display:flex; align-items:center; flex:1; min-width:0; padding-right:2px;">
+                                <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
+                                    <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
+                                        <span class="${cls}" style="white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">${content}</span>
+                                    </div>
+                                </div>
+                                <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0; visibility:hidden;"><button class="collapse-btn" style="font-size:9px; padding:0;">(show)</button></div>
+                                <div style="display:flex; align-items:center; flex-shrink:0;">
+                                    <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
+                                    <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
+                                        <input type="checkbox"><span class="config-switch-slider"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`
+                    }
+
                     if (item.type === 'obj') {
                         const obj = item.obj
-                        const objId = `op_obj_${obj.id || (obj.node && obj.node._id) || Math.random()}`
+                        const rawId = obj.id || (obj.node && obj.node._id) || Math.random()
+                        const displayId = obj.id || (obj.node && obj.node.id()) || 'Object'
+                        const objId = `op_obj_${rawId}`
                         let valStr = obj.name || (obj.node ? obj.node.name() : '') || `Object`
                         const innerText = obj.node && typeof obj.node.findOne === 'function' ? obj.node.findOne('.inner-text') : null
                         if (innerText && typeof innerText.text === 'function' && innerText.text()) valStr = innerText.text()
                         
-                        let propsStr = cat === 'Filter Objects' ? '{}' : (cat === 'Text Objects' ? '{Blocking:{}, Styling:{}}' : '{Blocking, Styling}')
-                        hHTML += buildAdvHTML(objId, `"${valStr}": <span style="color:#aaa; font-family:monospace;">${propsStr}</span>`, true, true, catId, true, '', true)
+                        let propsStr = ''
+                        if (cat === 'Filter Objects') {
+                            propsStr = getPropRow('config-item-value', `"value": <span style="color:#f1c40f;">"${valStr}"</span>`)
+                        } else {
+                            propsStr = getPropRow('config-item-value', `"value": <span style="color:#f1c40f;">"${valStr}"</span>,`) +
+                                       getPropRow('config-item-blocking', `"Blocking": {<br>&nbsp;&nbsp;<br>},`) +
+                                       getPropRow('config-item-styling', `"Styling": {<br>&nbsp;&nbsp;<br>}`)
+                        }
+                        
+                        const objCollapseId = `collapse_props_${objId}`
+                        const objBtn = `<button class="collapse-btn" data-target="${objCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:0; padding:0;">(show)</button>`
+                        
+                        hHTML += buildAdvHTML(objId, `"${displayId}": {`, true, true, catId, true, objBtn, true)
+                        hHTML += `<div id="${objCollapseId}" style="display:none; margin-top:2px; margin-bottom:4px;"><span style="color:#aaa; font-family:monospace;">${propsStr}</span></div>`
                     } else if (item.type === 'tg') {
                         const tgId = `op_tg_${item.name.replace(/\W/g, '')}_${cat.replace(/\s+/g, '')}`
-                        const btn = `<button class="collapse-btn" data-target="collapse_${tgId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:0; padding:0;">(show)</button>`
-                        hHTML += buildAdvHTML(tgId, `"${item.name}": <span style="color:#aaa; font-family:monospace;">{Blocking, Styling}</span>`, true, true, catId, true, btn, true)
-                        hHTML += `<div id="collapse_${tgId}" style="display:none; margin-left: 12px; padding-left: 8px; border-left: 1px solid #555; margin-top:2px; margin-bottom:4px;"></div>`
+                        const tgCollapseId = `collapse_props_${tgId}`
+                        const btn = `<button class="collapse-btn" data-target="${tgCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:0; padding:0;">(show)</button>`
+                        
+                        let propsStr = getPropRow('config-item-value', `"value": <span style="color:#f1c40f;">"${item.name}"</span>,`) +
+                                       getPropRow('config-item-blocking', `"Blocking": {<br>&nbsp;&nbsp;<br>},`) +
+                                       getPropRow('config-item-styling', `"Styling": {<br>&nbsp;&nbsp;<br>}`)
+                        
+                        hHTML += buildAdvHTML(tgId, `"${item.name}": {`, true, true, catId, true, btn, true)
+                        hHTML += `<div id="${tgCollapseId}" style="display:none; margin-top:2px; margin-bottom:4px;"><span style="color:#aaa; font-family:monospace;">${propsStr}</span></div>`
                     }
                 })
                 hHTML += `</div></div>`
@@ -767,6 +791,47 @@ export function initConfigTabBindings() {
                                 return nTarget && nTarget.style.display === 'none'
                             })
                             btn.innerText = (hasNestedLinks && hasHiddenNested) ? '(expand)' : '(hide)'
+                        }
+                    }
+                })
+
+                container.querySelectorAll('.jump-prop-link').forEach(link => {
+                    link.onclick = (e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        const targetId = link.dataset.targetId
+                        
+                        const sect2 = document.getElementById('config-sect-2')
+                        if (sect2) sect2.style.display = 'block'
+                        const sect2Btn = document.querySelector(`.collapse-btn.sect-toggle-btn[data-target="config-sect-2"]`)
+                        if (sect2Btn) sect2Btn.innerText = '(hide)'
+                        
+                        const targetWrap = document.getElementById(`label-wrap-${targetId}`)
+                        if (targetWrap) {
+                            let parent = targetWrap.parentElement
+                            while (parent && parent.id !== 'config-sect-2') {
+                                if (parent.style.display === 'none') {
+                                    parent.style.display = 'block'
+                                    const btn = document.querySelector(`.collapse-btn[data-target="${parent.id}"]`)
+                                    if (btn) btn.innerText = '(hide)'
+                                }
+                                parent = parent.parentElement
+                            }
+                            
+                            const objCollapse = document.getElementById(`collapse_props_${targetId}`)
+                            if (objCollapse) {
+                                objCollapse.style.display = 'block'
+                                const btn = document.querySelector(`.collapse-btn[data-target="${objCollapse.id}"]`)
+                                if (btn) btn.innerText = '(hide)'
+                            }
+                            
+                            targetWrap.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                            
+                            targetWrap.style.transition = 'background-color 0.3s'
+                            targetWrap.style.backgroundColor = 'rgba(0, 168, 255, 0.3)'
+                            setTimeout(() => {
+                                targetWrap.style.backgroundColor = 'transparent'
+                            }, 1000)
                         }
                     }
                 })

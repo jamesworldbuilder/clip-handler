@@ -2605,6 +2605,19 @@ export function openFilterEditor(node) {
             if (dofCoreInput) dofCoreInput.value = (node.getAttr('dofCore') ?? 2.5).toFixed(1)
             if (dofFeatherInput) dofFeatherInput.value = (node.getAttr('dofFeather') ?? 23.0).toFixed(1)
         }
+        
+        const confirmBtn = document.getElementById('confirm-filter-btn')
+        if (confirmBtn) {
+            if (type === 'none') {
+                confirmBtn.disabled = true
+                confirmBtn.style.opacity = '0.4'
+                confirmBtn.style.cursor = 'not-allowed'
+            } else {
+                confirmBtn.disabled = false
+                confirmBtn.style.opacity = '1'
+                confirmBtn.style.cursor = 'pointer'
+            }
+        }
     }
 
     if (dropdown) {
