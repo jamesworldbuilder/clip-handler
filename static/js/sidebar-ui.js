@@ -3835,18 +3835,28 @@ export const buildTransformConfig = (node) => {
     config.id = rawId
     config.type = objType
     
+    const x = Math.round(node.x())
+    const y = Math.round(node.y())
+    const sx = Number(node.scaleX().toFixed(2))
+    const sy = Number(node.scaleY().toFixed(2))
+    const ox = Math.round(node.offsetX())
+    const oy = Math.round(node.offsetY())
+    const cx = Math.round(x + (ox * sx))
+    const cy = Math.round(y + (oy * sy))
+
     config.Blocking = {
-        x: Math.round(node.x()),
-        y: Math.round(node.y()),
-        width: Math.round(node.width()),
-        height: Math.round(node.height()),
-        scaleX: Number(node.scaleX().toFixed(2)),
-        scaleY: Number(node.scaleY().toFixed(2)),
-        rotation: Math.round(node.rotation()),
-        offsetX: Math.round(node.offsetX()),
-        offsetY: Math.round(node.offsetY()),
-        flipH: node.scaleX() < 0,
-        flipV: node.scaleY() < 0
+        "center-point": [cx, cy],
+        "x-position": x,
+        "y-position": y,
+        "width": Math.round(node.width()),
+        "height": Math.round(node.height()),
+        "x-scale": sx,
+        "y-scale": sy,
+        "rotation-degrees": Math.round(node.rotation()),
+        "x-anchor": ox,
+        "y-anchor": oy,
+        "flip-horizontal": node.scaleX() < 0,
+        "flip-vertical": node.scaleY() < 0
     }
     
     // elevates interval block to sit at root level of the generated transform dictionary
@@ -3862,56 +3872,30 @@ export const buildTransformConfig = (node) => {
     const isGroup = node.getClassName() === 'Group'
     const innerText = typeof node.findOne === 'function' ? node.findOne('.inner-text') : null
     
+    const hasShadow = innerText ? (innerText.shadowOpacity() > 0) : (node.shadowOpacity && node.shadowOpacity() > 0)
+    const hasBorder = innerText ? (innerText.stroke() && innerText.stroke() !== 'transparent') : (node.stroke && node.stroke() !== 'transparent')
+    
     config.Styling = {
-        opacity: Number(node.opacity().toFixed(2))
+        transparency: Math.round((1 - Number((node.opacity() !== undefined ? node.opacity() : 1).toFixed(2))) * 100),
+        shadow: hasShadow,
+        border: hasBorder
     }
     
     if (innerText) {
         config.Styling.Text = {
-            fontFamily: innerText.fontFamily(),
-            fontSize: innerText.fontSize(),
-            fontStyle: innerText.fontStyle(),
-            align: innerText.align(),
-            fill: innerText.fill(),
-            stroke: innerText.stroke() !== 'transparent' ? innerText.stroke() : null,
-            strokeWidth: innerText.strokeWidth()
+            "font-family": innerText.fontFamily(),
+            "font-size": innerText.fontSize(),
+            "font-style": innerText.fontStyle(),
+            "text-alignment": innerText.align(),
+            "text-color": innerText.fill(),
+            "text-outline-color": innerText.stroke() !== 'transparent' ? innerText.stroke() : null,
+            "text-outline-thickness": innerText.strokeWidth()
         }
     } else if (!isGroup && node.getClassName() !== 'Image' && node.getClassName() !== 'Layer') {
         config.Styling.Shape = {
             shapeType: node.getAttr('shapeClassType') || 'Rectangle',
             fill: node.fill && typeof node.fill === 'function' ? node.fill() : null
         }
-    }
-    
-    if (!innerText) {
-        const strokeColor = node.stroke && typeof node.stroke === 'function' ? node.stroke() : null
-        if (strokeColor && strokeColor !== 'transparent') {
-            config.Styling.Border = {
-                color: strokeColor,
-                thickness: node.strokeWidth ? node.strokeWidth() : 0,
-                dash: node.dash ? node.dash() : null,
-                top: node.getAttr('strokeTop') ?? true,
-                right: node.getAttr('strokeRight') ?? true,
-                bottom: node.getAttr('strokeBottom') ?? true,
-                left: node.getAttr('strokeLeft') ?? true
-            }
-        } else {
-            config.Styling.Border = null
-        }
-    }
-    
-    // evaluates inner text or node for shadow properties and assigns directly to styling dictionary
-    const shadowTarget = innerText || node
-    if (shadowTarget && shadowTarget.shadowOpacity && shadowTarget.shadowOpacity() > 0) {
-        config.Styling.Shadow = {
-            color: shadowTarget.shadowColor(),
-            blur: shadowTarget.shadowBlur(),
-            offsetX: Math.round(shadowTarget.shadowOffsetX()),
-            offsetY: Math.round(shadowTarget.shadowOffsetY()),
-            opacity: Number(shadowTarget.shadowOpacity().toFixed(2))
-        }
-    } else {
-        config.Styling.Shadow = null
     }
     
     return config
@@ -4204,46 +4188,50 @@ export function initTransformsPanel(node) {
                 const blocking = activeEl.Blocking || configData.Blocking
                 const styling = activeEl.Styling || configData.Styling
 
-                targetNode.x(blocking.x)
-                targetNode.y(blocking.y)
+                targetNode.x(blocking['x-position'] !== undefined ? blocking['x-position'] : blocking.x)
+                targetNode.y(blocking['y-position'] !== undefined ? blocking['y-position'] : blocking.y)
                 targetNode.width(blocking.width)
                 targetNode.height(blocking.height)
-                targetNode.scaleX(blocking.scaleX)
-                targetNode.scaleY(blocking.scaleY)
-                targetNode.rotation(blocking.rotation)
-                targetNode.offsetX(blocking.offsetX)
-                targetNode.offsetY(blocking.offsetY)
-                targetNode.opacity(styling.opacity !== undefined ? styling.opacity : 1)
+                targetNode.scaleX(blocking['x-scale'] !== undefined ? blocking['x-scale'] : blocking.scaleX)
+                targetNode.scaleY(blocking['y-scale'] !== undefined ? blocking['y-scale'] : blocking.scaleY)
+                targetNode.rotation(blocking['rotation-degrees'] !== undefined ? blocking['rotation-degrees'] : blocking.rotation)
+                targetNode.offsetX(blocking['x-anchor'] !== undefined ? blocking['x-anchor'] : blocking.offsetX)
+                targetNode.offsetY(blocking['y-anchor'] !== undefined ? blocking['y-anchor'] : blocking.offsetY)
+                
+                const transp = styling.transparency !== undefined ? styling.transparency : (styling.opacity !== undefined ? Math.round((1 - styling.opacity)*100) : 0)
+                targetNode.opacity(1 - (transp / 100))
                 
                 const innerText = typeof targetNode.findOne === 'function' ? targetNode.findOne('.inner-text') : null
                 if (innerText && styling.Text) {
-                    innerText.fontFamily(styling.Text.fontFamily)
-                    innerText.fontSize(styling.Text.fontSize)
-                    innerText.fontStyle(styling.Text.fontStyle)
-                    innerText.align(styling.Text.align)
-                    innerText.fill(styling.Text.fill)
-                    innerText.stroke(styling.Text.stroke || 'transparent')
-                    innerText.strokeWidth(styling.Text.strokeWidth || 0)
+                    innerText.fontFamily(styling.Text['font-family'] !== undefined ? styling.Text['font-family'] : styling.Text.fontFamily)
+                    innerText.fontSize(styling.Text['font-size'] !== undefined ? styling.Text['font-size'] : styling.Text.fontSize)
+                    innerText.fontStyle(styling.Text['font-style'] !== undefined ? styling.Text['font-style'] : styling.Text.fontStyle)
+                    innerText.align(styling.Text['text-alignment'] !== undefined ? styling.Text['text-alignment'] : styling.Text.align)
+                    innerText.fill(styling.Text['text-color'] !== undefined ? styling.Text['text-color'] : styling.Text.fill)
+                    innerText.stroke(styling.Text['text-outline-color'] !== undefined ? styling.Text['text-outline-color'] : (styling.Text.stroke || 'transparent'))
+                    innerText.strokeWidth(styling.Text['text-outline-thickness'] !== undefined ? styling.Text['text-outline-thickness'] : (styling.Text.strokeWidth || 0))
                 } else if (styling.Shape) {
                     if (targetNode.fill) targetNode.fill(styling.Shape.fill)
                 }
                 
-                if (styling.Border && !innerText) {
-                    if (targetNode.stroke) targetNode.stroke(styling.Border.color)
-                    if (targetNode.strokeWidth) targetNode.strokeWidth(styling.Border.thickness)
-                    if (targetNode.dash) targetNode.dash(styling.Border.dash || [])
-                } else if (!innerText) {
+                const borderData = styling.border !== undefined ? styling.border : styling.Border
+                if (typeof borderData === 'object' && borderData !== null && !innerText) {
+                    if (targetNode.stroke) targetNode.stroke(borderData.color)
+                    if (targetNode.strokeWidth) targetNode.strokeWidth(borderData.thickness)
+                    if (targetNode.dash) targetNode.dash(borderData.dash || [])
+                } else if (!innerText && (borderData === false || borderData === null)) {
                     if (targetNode.stroke) targetNode.stroke('transparent')
                 }
                 
                 const shadowTarget = innerText || targetNode
-                if (styling.Shadow) {
-                    shadowTarget.shadowColor(styling.Shadow.color)
-                    shadowTarget.shadowBlur(styling.Shadow.blur)
-                    shadowTarget.shadowOffsetX(styling.Shadow.offsetX)
-                    shadowTarget.shadowOffsetY(styling.Shadow.offsetY)
-                    shadowTarget.shadowOpacity(styling.Shadow.opacity)
-                } else {
+                const shadowData = styling.shadow !== undefined ? styling.shadow : styling.Shadow
+                if (typeof shadowData === 'object' && shadowData !== null) {
+                    shadowTarget.shadowColor(shadowData.color)
+                    shadowTarget.shadowBlur(shadowData.blur)
+                    shadowTarget.shadowOffsetX(shadowData.offsetX)
+                    shadowTarget.shadowOffsetY(shadowData.offsetY)
+                    shadowTarget.shadowOpacity(shadowData.opacity)
+                } else if (shadowData === false || shadowData === null) {
                     shadowTarget.shadowOpacity(0)
                 }
 
@@ -4343,46 +4331,50 @@ export function initTransformsPanel(node) {
                 const blocking = activeEl.Blocking || configData.Blocking
                 const styling = activeEl.Styling || configData.Styling
 
-                targetNode.x(blocking.x)
-                targetNode.y(blocking.y)
+                targetNode.x(blocking['x-position'] !== undefined ? blocking['x-position'] : blocking.x)
+                targetNode.y(blocking['y-position'] !== undefined ? blocking['y-position'] : blocking.y)
                 targetNode.width(blocking.width)
                 targetNode.height(blocking.height)
-                targetNode.scaleX(blocking.scaleX)
-                targetNode.scaleY(blocking.scaleY)
-                targetNode.rotation(blocking.rotation)
-                targetNode.offsetX(blocking.offsetX)
-                targetNode.offsetY(blocking.offsetY)
-                targetNode.opacity(styling.opacity !== undefined ? styling.opacity : 1)
+                targetNode.scaleX(blocking['x-scale'] !== undefined ? blocking['x-scale'] : blocking.scaleX)
+                targetNode.scaleY(blocking['y-scale'] !== undefined ? blocking['y-scale'] : blocking.scaleY)
+                targetNode.rotation(blocking['rotation-degrees'] !== undefined ? blocking['rotation-degrees'] : blocking.rotation)
+                targetNode.offsetX(blocking['x-anchor'] !== undefined ? blocking['x-anchor'] : blocking.offsetX)
+                targetNode.offsetY(blocking['y-anchor'] !== undefined ? blocking['y-anchor'] : blocking.offsetY)
+                
+                const transp = styling.transparency !== undefined ? styling.transparency : (styling.opacity !== undefined ? Math.round((1 - styling.opacity)*100) : 0)
+                targetNode.opacity(1 - (transp / 100))
                 
                 const innerText = typeof targetNode.findOne === 'function' ? targetNode.findOne('.inner-text') : null
                 if (innerText && styling.Text) {
-                    innerText.fontFamily(styling.Text.fontFamily)
-                    innerText.fontSize(styling.Text.fontSize)
-                    innerText.fontStyle(styling.Text.fontStyle)
-                    innerText.align(styling.Text.align)
-                    innerText.fill(styling.Text.fill)
-                    innerText.stroke(styling.Text.stroke || 'transparent')
-                    innerText.strokeWidth(styling.Text.strokeWidth || 0)
+                    innerText.fontFamily(styling.Text['font-family'] !== undefined ? styling.Text['font-family'] : styling.Text.fontFamily)
+                    innerText.fontSize(styling.Text['font-size'] !== undefined ? styling.Text['font-size'] : styling.Text.fontSize)
+                    innerText.fontStyle(styling.Text['font-style'] !== undefined ? styling.Text['font-style'] : styling.Text.fontStyle)
+                    innerText.align(styling.Text['text-alignment'] !== undefined ? styling.Text['text-alignment'] : styling.Text.align)
+                    innerText.fill(styling.Text['text-color'] !== undefined ? styling.Text['text-color'] : styling.Text.fill)
+                    innerText.stroke(styling.Text['text-outline-color'] !== undefined ? styling.Text['text-outline-color'] : (styling.Text.stroke || 'transparent'))
+                    innerText.strokeWidth(styling.Text['text-outline-thickness'] !== undefined ? styling.Text['text-outline-thickness'] : (styling.Text.strokeWidth || 0))
                 } else if (styling.Shape) {
                     if (targetNode.fill) targetNode.fill(styling.Shape.fill)
                 }
                 
-                if (styling.Border && !innerText) {
-                    if (targetNode.stroke) targetNode.stroke(styling.Border.color)
-                    if (targetNode.strokeWidth) targetNode.strokeWidth(styling.Border.thickness)
-                    if (targetNode.dash) targetNode.dash(styling.Border.dash || [])
-                } else if (!innerText) {
+                const borderData = styling.border !== undefined ? styling.border : styling.Border
+                if (typeof borderData === 'object' && borderData !== null && !innerText) {
+                    if (targetNode.stroke) targetNode.stroke(borderData.color)
+                    if (targetNode.strokeWidth) targetNode.strokeWidth(borderData.thickness)
+                    if (targetNode.dash) targetNode.dash(borderData.dash || [])
+                } else if (!innerText && (borderData === false || borderData === null)) {
                     if (targetNode.stroke) targetNode.stroke('transparent')
                 }
                 
                 const shadowTarget = innerText || targetNode
-                if (styling.Shadow) {
-                    shadowTarget.shadowColor(styling.Shadow.color)
-                    shadowTarget.shadowBlur(styling.Shadow.blur)
-                    shadowTarget.shadowOffsetX(styling.Shadow.offsetX)
-                    shadowTarget.shadowOffsetY(styling.Shadow.offsetY)
-                    shadowTarget.shadowOpacity(styling.Shadow.opacity)
-                } else {
+                const shadowData = styling.shadow !== undefined ? styling.shadow : styling.Shadow
+                if (typeof shadowData === 'object' && shadowData !== null) {
+                    shadowTarget.shadowColor(shadowData.color)
+                    shadowTarget.shadowBlur(shadowData.blur)
+                    shadowTarget.shadowOffsetX(shadowData.offsetX)
+                    shadowTarget.shadowOffsetY(shadowData.offsetY)
+                    shadowTarget.shadowOpacity(shadowData.opacity)
+                } else if (shadowData === false || shadowData === null) {
                     shadowTarget.shadowOpacity(0)
                 }
                 

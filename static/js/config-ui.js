@@ -674,6 +674,173 @@ export function initConfigTabBindings() {
                         </div>`
                     }
 
+                    const getPropBlock = (cls, key, innerContent, cId, isLast) => {
+                        const topRow = `<div style="display:flex; align-items:center; flex:1; min-width:0; padding-right:2px;">
+                            <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
+                                <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
+                                    <span class="${cls}" style="white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">"${key}": {</span>
+                                </div>
+                            </div>
+                            <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0;"><button class="collapse-btn" data-target="${cId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; padding:0;">(show)</button></div>
+                            <div style="display:flex; align-items:center; flex-shrink:0;">
+                                <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
+                                <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
+                                    <input type="checkbox"><span class="config-switch-slider"></span>
+                                </div>
+                            </div>
+                        </div>`
+
+                        return `<div style="margin-bottom:2px; margin-left:6px; padding-left:6px; border-left:1px dashed #444;">
+                            ${topRow}
+                            <div id="${cId}" style="display:none; margin-top:2px; margin-bottom:2px; margin-left:6px; padding-left:8px; border-left:1px dashed #444; color:#aaa; font-family:monospace; font-size:11px;">
+                                ${innerContent}
+                            </div>
+                            <div style="display:flex; align-items:center; flex:1; min-width:0; padding-right:2px;">
+                                <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
+                                    <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
+                                        <span class="config-item-value" style="white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">}${isLast ? '' : ','}</span>
+                                    </div>
+                                </div>
+                                <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0; visibility:hidden;"><button class="collapse-btn" style="font-size:9px; padding:0;">(show)</button></div>
+                                <div style="display:flex; align-items:center; flex-shrink:0;">
+                                    <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
+                                    <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
+                                        <input type="checkbox"><span class="config-switch-slider"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`
+                    }
+
+                    const getBoolColor = (val) => val ? '#2ecc71' : '#e74c3c'
+
+                    const buildPropsStr = (node, objId, valStr, isFilter) => {
+                        if (isFilter) {
+                            return getPropRow('config-item-value', `"value": <span style="color:#f1c40f;">"${valStr}"</span>`)
+                        }
+                        
+                        const getInnerLine = (key, valHtml, isComma = true) => {
+                            return `<div style="margin-bottom:2px; display:flex; align-items:center; flex:1; min-width:0; padding-right:2px;">
+                                <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
+                                    <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
+                                        <span class="config-item-value" style="white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">"${key}": ${valHtml}${isComma ? ',' : ''}</span>
+                                    </div>
+                                </div>
+                                <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0; visibility:hidden;"><button class="collapse-btn" style="font-size:9px; padding:0;">(show)</button></div>
+                                <div style="display:flex; align-items:center; flex-shrink:0;">
+                                    <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
+                                    <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
+                                        <input type="checkbox"><span class="config-switch-slider"></span>
+                                    </div>
+                                </div>
+                            </div>`
+                        }
+                        
+                        let blockingInner = ''
+                        let stylingInner = ''
+                        
+                        if (node) {
+                            const x = Math.round(node.x() || 0)
+                            const y = Math.round(node.y() || 0)
+                            const w = Math.round(node.width() || 0)
+                            const h = Math.round(node.height() || 0)
+                            const sx = Number((node.scaleX() || 1).toFixed(2))
+                            const sy = Number((node.scaleY() || 1).toFixed(2))
+                            const rot = Math.round(node.rotation() || 0)
+                            const ox = Math.round(node.offsetX() || 0)
+                            const oy = Math.round(node.offsetY() || 0)
+                            const flipH = sx < 0
+                            const flipV = sy < 0
+                            const ratioLocked = node.getAttr('keepRatio') || false
+                            const cx = Math.round(x + (ox * sx))
+                            const cy = Math.round(y + (oy * sy))
+                            
+                            blockingInner = 
+                                getInnerLine('center-point', `<span style="color:#2ecc71;">[${cx}, ${cy}]</span>`) +
+                                getInnerLine('x-position', `<span style="color:#2ecc71;">${x}</span>`) +
+                                getInnerLine('y-position', `<span style="color:#2ecc71;">${y}</span>`) +
+                                getInnerLine('width', `<span style="color:#2ecc71;">${w}</span>`) +
+                                getInnerLine('height', `<span style="color:#2ecc71;">${h}</span>`) +
+                                getInnerLine('ratio-locked', `<span style="color:${getBoolColor(ratioLocked)};">${ratioLocked}</span>`) +
+                                getInnerLine('x-scale', `<span style="color:#2ecc71;">${sx}</span>`) +
+                                getInnerLine('y-scale', `<span style="color:#2ecc71;">${sy}</span>`) +
+                                getInnerLine('rotation-degrees', `<span style="color:#2ecc71;">${rot}°</span>`) +
+                                getInnerLine('x-anchor', `<span style="color:#2ecc71;">${ox}</span>`) +
+                                getInnerLine('y-anchor', `<span style="color:#2ecc71;">${oy}</span>`) +
+                                getInnerLine('flip-horizontal', `<span style="color:${getBoolColor(flipH)};">${flipH}</span>`) +
+                                getInnerLine('flip-vertical', `<span style="color:${getBoolColor(flipV)};">${flipV}</span>`, false)
+
+                            const opacity = Number((node.opacity() !== undefined ? node.opacity() : 1).toFixed(2))
+                            const transp = Math.round((1 - opacity) * 100)
+                            
+                            const innerText = typeof node.findOne === 'function' ? node.findOne('.inner-text') : null
+                            const hasShadow = innerText ? (innerText.shadowOpacity() > 0) : (node.shadowOpacity && node.shadowOpacity() > 0)
+                            const hasBorder = innerText ? (innerText.stroke() && innerText.stroke() !== 'transparent') : (node.stroke && node.stroke() !== 'transparent')
+
+                            let textInnerHtml = ''
+                            if (innerText) {
+                                textInnerHtml = 
+                                    getInnerLine('font-family', `<span style="color:#f1c40f;">"${innerText.fontFamily() || 'sans-serif'}"</span>`) +
+                                    getInnerLine('font-size', `<span style="color:#2ecc71;">${innerText.fontSize() || 0}px</span>`) +
+                                    getInnerLine('font-style', `<span style="color:#f1c40f;">"${innerText.fontStyle() || 'normal'}"</span>`) +
+                                    getInnerLine('text-alignment', `<span style="color:#f1c40f;">"${innerText.align() || 'left'}"</span>`) +
+                                    getInnerLine('text-color', `<span style="color:#f1c40f;">"${innerText.fill() || '#ffffff'}"</span>`) +
+                                    getInnerLine('text-outline-color', `<span style="color:#f1c40f;">"${innerText.stroke() || 'transparent'}"</span>`) +
+                                    getInnerLine('text-outline-thickness', `<span style="color:#2ecc71;">${innerText.strokeWidth() || 0}px</span>`, false)
+                            }
+
+                            const textCollapseId = `collapse_text_${objId}`
+                            
+                            stylingInner = 
+                                getInnerLine('transparency', `<span style="color:#2ecc71;">${transp}%</span>`) +
+                                getInnerLine('shadow', `<span style="color:${getBoolColor(hasShadow)};">${hasShadow}</span>`) +
+                                getInnerLine('border', `<span style="color:${getBoolColor(hasBorder)};">${hasBorder}</span>`, !innerText)
+                            
+                            if (innerText) {
+                                stylingInner += `
+                                    <div style="display:flex; align-items:center; flex:1; min-width:0; padding-right:2px; margin-bottom:2px;">
+                                        <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
+                                            <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
+                                                <span class="config-item-value" style="white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">"Text": {</span>
+                                            </div>
+                                        </div>
+                                        <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0;"><button class="collapse-btn" data-target="${textCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; padding:0;">(show)</button></div>
+                                        <div style="display:flex; align-items:center; flex-shrink:0;">
+                                            <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
+                                            <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
+                                                <input type="checkbox"><span class="config-switch-slider"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div id="${textCollapseId}" style="display:none; margin-top:2px; margin-bottom:2px; margin-left:6px; padding-left:8px; border-left:1px dashed #444;">
+                                        ${textInnerHtml}
+                                    </div>
+                                    <div style="display:flex; align-items:center; flex:1; min-width:0; padding-right:2px;">
+                                        <div style="display:flex; align-items:center; overflow:hidden; flex:1;">
+                                            <div class="name-scroll-wrap" style="overflow:hidden; display:flex; flex:1; min-width:0;">
+                                                <span class="config-item-value" style="white-space:nowrap; display:block; overflow:hidden; width:100%; text-overflow:ellipsis;">}</span>
+                                            </div>
+                                        </div>
+                                        <div style="margin-left:8px; margin-right:16px; display:flex; align-items:center; flex-shrink:0; visibility:hidden;"><button class="collapse-btn" style="font-size:9px; padding:0;">(show)</button></div>
+                                        <div style="display:flex; align-items:center; flex-shrink:0;">
+                                            <div class="val-scroll-wrap" style="width:75px; justify-content:flex-end; margin-right:8px; display:none;"></div>
+                                            <div class="config-switch-wrap" style="visibility:hidden; margin-right:0;">
+                                                <input type="checkbox"><span class="config-switch-slider"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `
+                            }
+                        }
+                        
+                        const blockId = `collapse_block_${objId}`
+                        const styleId = `collapse_style_${objId}`
+
+                        return getPropRow('config-item-value', `"value": <span style="color:#f1c40f;">"${valStr}"</span>,`) +
+                               getPropBlock('config-item-blocking', 'Blocking', blockingInner, blockId, false) +
+                               getPropBlock('config-item-styling', 'Styling', stylingInner, styleId, true)
+                    }
+
                     if (item.type === 'obj') {
                         const obj = item.obj
                         const rawId = obj.id || (obj.node && obj.node._id) || Math.random()
@@ -683,14 +850,7 @@ export function initConfigTabBindings() {
                         const innerText = obj.node && typeof obj.node.findOne === 'function' ? obj.node.findOne('.inner-text') : null
                         if (innerText && typeof innerText.text === 'function' && innerText.text()) valStr = innerText.text()
                         
-                        let propsStr = ''
-                        if (cat === 'Filter Objects') {
-                            propsStr = getPropRow('config-item-value', `"value": <span style="color:#f1c40f;">"${valStr}"</span>`)
-                        } else {
-                            propsStr = getPropRow('config-item-value', `"value": <span style="color:#f1c40f;">"${valStr}"</span>,`) +
-                                       getPropRow('config-item-blocking', `"Blocking": {<br>&nbsp;&nbsp;<br>},`) +
-                                       getPropRow('config-item-styling', `"Styling": {<br>&nbsp;&nbsp;<br>}`)
-                        }
+                        const propsStr = buildPropsStr(obj.node, objId, valStr, cat === 'Filter Objects')
                         
                         const objCollapseId = `collapse_props_${objId}`
                         const objBtn = `<button class="collapse-btn" data-target="${objCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:0; padding:0;">(show)</button>`
@@ -702,9 +862,18 @@ export function initConfigTabBindings() {
                         const tgCollapseId = `collapse_props_${tgId}`
                         const btn = `<button class="collapse-btn" data-target="${tgCollapseId}" style="background:none; border:none; color:#f39c12; cursor:pointer; font-size:9px; margin-left:0; padding:0;">(show)</button>`
                         
-                        let propsStr = getPropRow('config-item-value', `"value": <span style="color:#f1c40f;">"${item.name}"</span>,`) +
-                                       getPropRow('config-item-blocking', `"Blocking": {<br>&nbsp;&nbsp;<br>},`) +
-                                       getPropRow('config-item-styling', `"Styling": {<br>&nbsp;&nbsp;<br>}`)
+                        let firstObjInTg = null
+                        if (typeof appLayers !== 'undefined') {
+                            appLayers.forEach(l => {
+                                if (l.objects) l.objects.forEach(o => {
+                                    if (o.node && o.node.getAttr('transformGroupName') === item.name) {
+                                        if (!firstObjInTg) firstObjInTg = o.node
+                                    }
+                                })
+                            })
+                        }
+                        
+                        const propsStr = buildPropsStr(firstObjInTg, tgId, item.name, cat === 'Filter Objects')
                         
                         hHTML += buildAdvHTML(tgId, `"${item.name}": {`, true, true, catId, true, btn, true)
                         hHTML += `<div id="${tgCollapseId}" style="display:none; margin-top:2px; margin-bottom:4px;"><span style="color:#aaa; font-family:monospace;">${propsStr}</span></div>`
